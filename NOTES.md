@@ -3,21 +3,25 @@
 
 ---
 
-## 01 · The situation that created containers
+## 01 · Why containers were invented
 
-You run a hosting company. One powerful server, 200 customers. Each one needs their own website, their own files, their own settings — and none of them should ever see another's data.
+**The problem:** one server, 200 customers, each needing their own isolated website.
 
-Buying 200 machines is absurd. Running all 200 sites as plain processes on one machine is worse: they share a filesystem, they can read each other's files, and one badly written site can eat all the RAM and take the other 199 down with it.
+Three options existed:
 
-Virtual machines solve it — give each customer a whole simulated computer. But you pay for a **full operating system per customer**: gigabytes of RAM, minutes to boot, 200 copies of the same Linux doing the same work.
+| | Cost |
+|:--|:--|
+| 200 machines | absurd |
+| 200 processes on one machine | no isolation — they read each other's files, one crash starves all |
+| 200 VMs | works, but 200 full operating systems: GBs of RAM, minutes to boot, all running the same Linux |
 
-So the real question was:
+The VM wastes everything. The customer needs an isolated *website* — not an isolated *computer*.
 
-> **Can one machine host many isolated tenants — without pretending to be 200 machines?**
+> **Can one machine host many isolated tenants without pretending to be 200 machines?**
 
-Containers are the answer. Instead of simulating hardware, you keep one operating system and make it **lie to each process about what machine it's on**.
+Containers are the answer: keep one operating system, and make it **lie to each process about what machine it's on**.
 
-This is why containers were invented — density and isolation, not replacing VMs. That came later, and only partly.
+So containers were invented for **density and isolation** — not to replace VMs.
 
 ---
 
