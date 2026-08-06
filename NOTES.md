@@ -9,7 +9,7 @@ Before defining what Docker is, let's define what a **container** is — because
 
 ## 01 · What is a container?
 
-> **A container is just a normal Linux process on your kernel, with lies told to it.**
+> **A container is just a normal Linux process on your kernel, with lies told to it.** yep we just lie to the process
 
 That's the whole thing.
 
