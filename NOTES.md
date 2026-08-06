@@ -23,6 +23,17 @@ Containers are the answer: keep one operating system, and make it **lie to each 
 
 So containers were invented for **density and isolation** — not to replace VMs.
 
+| | Virtual Machine | Container |
+|:--|:--|:--|
+| **Memory** | a lot — a full OS each | far less — only the app |
+| **Boot** | slow, a real boot sequence | instant, reuses the running kernel |
+| **Scaling** | difficult | trivial |
+| **Efficiency** | low | high |
+| **Storage** | hard to share between VMs | shared freely between host and containers |
+| **Isolation** | strong — hardware level | weaker — same kernel |
+
+The last row is the trade: a VM's boundary is a hypervisor and hard to escape; a container's boundary is kernel bookkeeping, so a kernel bug crosses it.
+
 ---
 
 ## 02 · What is a container?
