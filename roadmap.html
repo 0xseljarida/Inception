@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCEPTION — The Descent Map · 42 Project Roadmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#07090f;
+  --ink-2:#0c1018;
+  --ink-3:#121826;
+  --line:#1d2738;
+  --line-soft:#16203150;
+  --amber:#ffc83d;
+  --amber-deep:#e8a818;
+  --green:#3ddc84;
+  --red:#ff5d5d;
+  --blue:#6db3ff;
+  --text:#dce4f2;
+  --text-dim:#8b97ad;
+  --mono:'JetBrains Mono', monospace;
+  --disp:'Bricolage Grotesque', sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ink);
+  color:var(--text);
+  font-family:var(--disp);
+  font-weight:380;
+  line-height:1.6;
+  overflow-x:hidden;
+}
+/* blueprint grid + vignette + grain */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-2;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, #16233f66, transparent 60%),
+    linear-gradient(#101a2e40 1px, transparent 1px),
+    linear-gradient(90deg, #101a2e40 1px, transparent 1px);
+  background-size:auto, 44px 44px, 44px 44px;
+}
+body::after{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+::selection{background:var(--amber);color:var(--ink)}
+
+/* ============ HEADER ============ */
+header{
+  max-width:1180px;margin:0 auto;padding:64px 32px 24px;
+  display:flex;align-items:flex-end;justify-content:space-between;gap:32px;flex-wrap:wrap;
+}
+.brand .kicker{
+  font-family:var(--mono);font-size:12px;letter-spacing:.32em;color:var(--amber);
+  text-transform:uppercase;display:flex;align-items:center;gap:10px;
+}
+.brand .kicker::before{content:"";width:34px;height:1px;background:var(--amber)}
+.brand h1{
+  font-size:clamp(54px,9vw,108px);font-weight:780;line-height:.95;letter-spacing:-.03em;
+  font-variation-settings:'opsz' 96;
+  background:linear-gradient(180deg,#fff 30%,#7e8db0);
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+.brand h1 em{font-style:normal;color:var(--amber);-webkit-text-fill-color:var(--amber)}
+.brand p{color:var(--text-dim);max-width:560px;margin-top:14px;font-size:16px}
+.brand p strong{color:var(--text);font-weight:600}
+
+.progress-card{
+  border:1px solid var(--line);background:linear-gradient(160deg,var(--ink-2),var(--ink-3));
+  border-radius:18px;padding:20px 24px;display:flex;align-items:center;gap:20px;min-width:280px;
+  box-shadow:0 24px 60px -30px #000;
+}
+.ring{width:84px;height:84px;border-radius:50%;display:grid;place-items:center;position:relative;flex-shrink:0}
+.ring .inner{width:64px;height:64px;border-radius:50%;background:var(--ink-2);display:grid;place-items:center;font-family:var(--mono);font-size:15px;font-weight:600;color:var(--amber)}
+.progress-card .meta{font-family:var(--mono);font-size:12px;color:var(--text-dim);line-height:1.9}
+.progress-card .meta b{color:var(--text);font-size:14px;display:block;font-weight:600}
+.progress-card button{
+  font-family:var(--mono);font-size:11px;background:none;border:1px solid var(--line);
+  color:var(--text-dim);border-radius:6px;padding:4px 10px;cursor:pointer;margin-top:6px;
+}
+.progress-card button:hover{border-color:var(--red);color:var(--red)}
+
+/* ============ FLOW STRIP ============ */
+.flow{
+  max-width:1180px;margin:28px auto 0;padding:0 32px;
+}
+.flow-inner{
+  border:1px dashed var(--line);border-radius:16px;padding:22px 28px;
+  display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:wrap;
+  background:#0a0e1690;backdrop-filter:blur(4px);
+}
+.fnode{
+  font-family:var(--mono);font-size:13px;font-weight:600;padding:10px 18px;border-radius:10px;
+  border:1.5px solid var(--line);color:var(--text);background:var(--ink-3);position:relative;white-space:nowrap;
+}
+.fnode small{display:block;font-weight:400;font-size:10px;color:var(--text-dim);letter-spacing:.08em}
+.fnode.hot{border-color:var(--amber);color:var(--amber);box-shadow:0 0 24px -6px #ffc83d55}
+.farrow{
+  font-family:var(--mono);font-size:10px;color:var(--amber);padding:0 14px;text-align:center;letter-spacing:.05em;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+}
+.farrow .wire{width:54px;height:1px;background:repeating-linear-gradient(90deg,var(--amber) 0 5px,transparent 5px 10px);position:relative}
+.farrow .wire::after{content:"";position:absolute;right:-1px;top:-3px;border:3.5px solid transparent;border-left-color:var(--amber)}
+
+/* ============ SPEED RUN ============ */
+.speedrun{max-width:1180px;margin:40px auto 0;padding:0 32px}
+.speedrun-inner{
+  border:1px solid #2a3b1f;border-radius:18px;overflow:hidden;
+  background:linear-gradient(165deg,#0d150c,#0a0e16 60%);
+}
+.speedrun-head{
+  display:flex;align-items:center;gap:14px;padding:18px 26px;border-bottom:1px dashed #243b1e;cursor:pointer;user-select:none;
+}
+.speedrun-head .bolt{
+  width:34px;height:34px;border-radius:9px;background:var(--green);color:#06140a;display:grid;place-items:center;font-size:18px;font-weight:800;
+  box-shadow:0 0 30px -4px #3ddc8466;
+}
+.speedrun-head h2{font-size:19px;font-weight:680;letter-spacing:-.01em}
+.speedrun-head h2 span{color:var(--green)}
+.speedrun-head .toggle{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text-dim)}
+.speedrun-body{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#1c2a17}
+.speedrun-body.hidden{display:none}
+.day{background:#0b110d;padding:20px;min-height:170px}
+.day .d{font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:.2em}
+.day h3{font-size:15px;font-weight:650;margin:6px 0 8px}
+.day p{font-size:12.5px;color:var(--text-dim);line-height:1.55}
+.day p code{color:var(--green)}
+
+/* ============ DEPTH RAIL ============ */
+.rail{
+  position:fixed;left:0;top:0;bottom:0;width:200px;padding:32px 0 32px 22px;
+  display:flex;flex-direction:column;justify-content:center;gap:4px;z-index:5;
+}
+.rail a{
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);text-decoration:none;
+  display:flex;align-items:center;gap:10px;padding:5px 0;transition:color .2s;
+}
+.rail a .dpt{width:30px;color:#3d4b66;font-size:10px;text-align:right;flex-shrink:0}
+.rail a .tick{width:7px;height:7px;border:1.5px solid var(--line);border-radius:50%;flex-shrink:0;transition:all .2s}
+.rail a:hover{color:var(--text)}
+.rail a.active{color:var(--amber)}
+.rail a.active .tick{border-color:var(--amber);background:var(--amber);box-shadow:0 0 10px #ffc83d88}
+.rail a.complete .tick{border-color:var(--green);background:var(--green)}
+@media(max-width:1480px){.rail{display:none}}
+
+/* ============ ROADMAP ============ */
+.map{max-width:980px;margin:56px auto 80px;padding:0 32px;position:relative}
+.spine{position:absolute;left:50%;top:0;bottom:0;width:1px;transform:translateX(-.5px);
+  background:repeating-linear-gradient(180deg,var(--amber) 0 6px,transparent 6px 13px);opacity:.45}
+.level{position:relative;padding:54px 0 10px;opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
+.level.vis{opacity:1;transform:none}
+.level-head{
+  position:relative;z-index:2;width:fit-content;margin:0 auto 36px;text-align:center;
+}
+.level-head .depth-tag{
+  font-family:var(--mono);font-size:10px;letter-spacing:.3em;color:var(--ink);
+  background:var(--amber);display:inline-block;padding:4px 14px;border-radius:99px;font-weight:600;
+  box-shadow:0 0 0 6px var(--ink),0 0 34px -4px #ffc83d77;
+}
+.level-head h2{
+  font-size:clamp(24px,3.4vw,34px);font-weight:720;letter-spacing:-.02em;margin-top:14px;
+  background:var(--ink);padding:0 18px;
+}
+.level-head .sub{font-size:13.5px;color:var(--text-dim);max-width:480px;margin:4px auto 0;background:var(--ink);padding:0 14px}
+.nodes{
+  display:grid;grid-template-columns:1fr 1fr;column-gap:130px;row-gap:22px;position:relative;z-index:1;
+}
+.node{
+  position:relative;border:1.5px solid var(--amber-deep);background:linear-gradient(165deg,#1a1607,#100e08);
+  border-radius:13px;padding:16px 18px 16px 20px;cursor:pointer;
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s, background .3s;
+}
+.node:hover{transform:translateY(-3px);box-shadow:0 16px 40px -14px #ffc83d33;border-color:var(--amber)}
+.node::after{
+  content:"";position:absolute;top:50%;width:130px;height:1px;
+  background:repeating-linear-gradient(90deg,var(--amber-deep) 0 5px,transparent 5px 11px);opacity:.5;
+}
+.node:nth-child(odd)::after{right:-130px}
+.node:nth-child(even)::after{left:-130px}
+.node .tag{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--amber);text-transform:uppercase}
+.node h3{font-size:16.5px;font-weight:640;letter-spacing:-.01em;margin-top:3px;color:#ffeec2;padding-right:34px}
+.node .hint{font-size:12.5px;color:var(--text-dim);margin-top:5px;line-height:1.45;padding-right:20px}
+.node .check{
+  position:absolute;top:14px;right:14px;width:24px;height:24px;border-radius:7px;
+  border:1.5px solid var(--amber-deep);background:transparent;cursor:pointer;display:grid;place-items:center;
+  color:transparent;font-size:14px;transition:all .15s;flex-shrink:0;
+}
+.node .check:hover{border-color:var(--green);color:#3ddc8466}
+.node.done{border-color:#2b4a36;background:linear-gradient(165deg,#0d1810,#0a0e16)}
+.node.done::after{background:repeating-linear-gradient(90deg,#2b4a36 0 5px,transparent 5px 11px)}
+.node.done .tag{color:var(--green)}
+.node.done h3{color:#9fb8a8;text-decoration:line-through;text-decoration-thickness:1.5px;text-decoration-color:#3ddc8499}
+.node.done .check{border-color:var(--green);background:var(--green);color:#06140a}
+@media(max-width:760px){
+  .spine{left:14px}
+  .nodes{grid-template-columns:1fr;column-gap:0;padding-left:44px}
+  .node::after, .node:nth-child(odd)::after, .node:nth-child(even)::after{left:-31px;width:31px;right:auto}
+  .level-head{margin-left:44px;text-align:left}
+  .level-head h2,.level-head .sub{padding:0}
+  .speedrun-body{grid-template-columns:1fr}
+  header{padding-top:40px}
+}
+
+/* ============ DRAWER ============ */
+.scrim{position:fixed;inset:0;background:#03050acc;backdrop-filter:blur(3px);z-index:40;opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(640px,100vw);z-index:50;
+  background:linear-gradient(200deg,#0e1421,#090c13);border-left:1px solid var(--line);
+  transform:translateX(102%);transition:transform .32s cubic-bezier(.32,.72,.25,1);
+  display:flex;flex-direction:column;box-shadow:-40px 0 90px -30px #000;
+}
+.drawer.open{transform:none}
+.drawer-top{padding:26px 34px 18px;border-bottom:1px dashed var(--line);position:relative}
+.drawer-top .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.22em;color:var(--amber);text-transform:uppercase}
+.drawer-top h2{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:6px;padding-right:60px}
+.drawer-top .close{
+  position:absolute;top:24px;right:26px;width:34px;height:34px;border-radius:9px;border:1px solid var(--line);
+  background:none;color:var(--text-dim);font-size:16px;cursor:pointer;font-family:var(--mono);
+}
+.drawer-top .close:hover{color:var(--text);border-color:var(--text-dim)}
+.drawer-body{flex:1;overflow-y:auto;padding:26px 34px 40px;font-size:14.5px}
+.drawer-body::-webkit-scrollbar{width:9px}
+.drawer-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
+.drawer-body h4{
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--amber);
+  margin:28px 0 10px;display:flex;align-items:center;gap:10px;
+}
+.drawer-body h4::after{content:"";flex:1;height:1px;background:var(--line)}
+.drawer-body h4:first-child{margin-top:0}
+.drawer-body p{margin:0 0 12px;color:#c4cede}
+.drawer-body p b, .drawer-body li b{color:var(--text);font-weight:620}
+.drawer-body ul{margin:0 0 14px;padding-left:20px;color:#c4cede}
+.drawer-body li{margin-bottom:7px}
+.drawer-body code{
+  font-family:var(--mono);font-size:.86em;background:#1a2336;color:#ffd980;
+  padding:2px 6px;border-radius:5px;
+}
+.drawer-body pre{
+  background:#070a11;border:1px solid var(--line);border-radius:11px;
+  padding:16px 18px;overflow-x:auto;margin:4px 0 16px;
+}
+.drawer-body pre code{background:none;padding:0;color:#cfe0ff;font-size:12.5px;line-height:1.65;display:block}
+.drawer-body pre .c{color:#5a6b87}
+.callout{border-radius:11px;padding:13px 16px 13px 46px;margin:0 0 14px;font-size:13.5px;position:relative;line-height:1.55}
+.callout::before{position:absolute;left:15px;top:12px;font-size:15px}
+.callout.trap{background:#2a121233;border:1px solid #5c2626;color:#f0c9c9}
+.callout.trap::before{content:"⚠"; color:var(--red)}
+.callout.trap b{color:#ff9c9c}
+.callout.fast{background:#10241733;border:1px solid #245c38;color:#c8eed6}
+.callout.fast::before{content:"⚡";color:var(--green)}
+.callout.fast b{color:var(--green)}
+.callout.info{background:#101c3050;border:1px solid #28466e;color:#cbdcf5}
+.callout.info::before{content:"◉";color:var(--blue)}
+.callout.info b{color:var(--blue)}
+.drawer-foot{padding:16px 34px;border-top:1px solid var(--line);display:flex;gap:12px;align-items:center}
+.btn-done{
+  font-family:var(--mono);font-size:13px;font-weight:600;border:none;border-radius:10px;
+  padding:12px 22px;cursor:pointer;background:var(--amber);color:var(--ink);flex:1;transition:all .15s;
+}
+.btn-done.is-done{background:#16291d;color:var(--green);border:1px solid #2b4a36}
+.btn-nav{
+  font-family:var(--mono);font-size:13px;border:1px solid var(--line);background:none;color:var(--text-dim);
+  border-radius:10px;padding:12px 16px;cursor:pointer;
+}
+.btn-nav:hover:not(:disabled){color:var(--text);border-color:var(--text-dim)}
+.btn-nav:disabled{opacity:.3;cursor:default}
+
+footer{max-width:980px;margin:0 auto;padding:30px 32px 60px;text-align:center;font-family:var(--mono);font-size:11.5px;color:#41506b;letter-spacing:.1em}
+footer b{color:var(--amber)}
+</style>
+</head>
+<body>
+
+<nav class="rail" id="rail"></nav>
+
+<header>
+  <div class="brand">
+    <div class="kicker">42 · System Administration · Docker</div>
+    <h1>INCEP<em>T</em>ION</h1>
+    <p>One container is not enough — <strong>we need to go deeper.</strong> Click any node to open a full deep-dive: what it is, why the subject demands it, the exact commands, and the traps evaluators check. Your progress is saved locally.</p>
+  </div>
+  <div class="progress-card">
+    <div class="ring" id="ring"><div class="inner" id="ringPct">0%</div></div>
+    <div class="meta">
+      <b id="ringCount">0 / 0 nodes</b>
+      descent progress
+      <button id="resetBtn">reset progress</button>
+    </div>
+  </div>
+</header>
+
+<div class="flow">
+  <div class="flow-inner">
+    <div class="fnode">WWW<small>browser</small></div>
+    <div class="farrow"><span>:443 TLS</span><span class="wire"></span></div>
+    <div class="fnode hot">NGINX<small>only entrypoint</small></div>
+    <div class="farrow"><span>:9000 FastCGI</span><span class="wire"></span></div>
+    <div class="fnode">WORDPRESS<small>php-fpm, no nginx</small></div>
+    <div class="farrow"><span>:3306 SQL</span><span class="wire"></span></div>
+    <div class="fnode">MARIADB<small>database only</small></div>
+  </div>
+</div>
+
+<div class="speedrun">
+  <div class="speedrun-inner">
+    <div class="speedrun-head" id="srHead">
+      <div class="bolt">⚡</div>
+      <h2>SPEED-RUN PLAN — <span>finish in ~5 focused days</span></h2>
+      <div class="toggle" id="srToggle">[ hide ]</div>
+    </div>
+    <div class="speedrun-body" id="srBody">
+      <div class="day"><div class="d">DAY 01</div><h3>VM + Skeleton</h3><p>Install Debian VM, Docker + compose plugin. Create the full directory tree, <code>Makefile</code>, <code>.env</code>, secrets files, empty Dockerfiles. Commit. Skeleton first = zero structural rework later.</p></div>
+      <div class="day"><div class="d">DAY 02</div><h3>MariaDB alone</h3><p>Build only the DB container. Test it in isolation: <code>docker exec -it mariadb mariadb -u user -p</code>. Don't touch WordPress until the DB accepts remote logins on 3306.</p></div>
+      <div class="day"><div class="d">DAY 03</div><h3>WordPress + php-fpm</h3><p>wp-cli script: download, config, install, 2 users. Verify it reaches MariaDB and php-fpm listens on 9000. Still no browser — test with <code>docker logs</code>.</p></div>
+      <div class="day"><div class="d">DAY 04</div><h3>NGINX + TLS + glue</h3><p>Self-signed cert, server block, <code>fastcgi_pass wordpress:9000</code>, <code>/etc/hosts</code> domain. Full stack up. Test persistence: post a comment, <code>make re</code>, comment survives.</p></div>
+      <div class="day"><div class="d">DAY 05</div><h3>Docs + Defense</h3><p>Write <code>README.md</code>, <code>USER_DOC.md</code>, <code>DEV_DOC.md</code> (mandatory in v5.3!). Rehearse defense questions. Only then consider bonus — it's worth nothing if mandatory isn't perfect.</p></div>
+    </div>
+  </div>
+</div>
+
+<main class="map" id="map">
+  <div class="spine"></div>
+</main>
+
+<footer>NON, JE NE REGRETTE RIEN — built for the descent · <b>inception @ 42</b></footer>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-top">
+    <div class="tag" id="dTag"></div>
+    <h2 id="dTitle"></h2>
+    <button class="close" id="dClose">✕</button>
+  </div>
+  <div class="drawer-body" id="dBody"></div>
+  <div class="drawer-foot">
+    <button class="btn-nav" id="dPrev">← prev</button>
+    <button class="btn-done" id="dDone">mark as done ✓</button>
+    <button class="btn-nav" id="dNext">next →</button>
+  </div>
+</aside>
+
+<script>
+const LEVELS = [
+/* ================================================================ LEVEL 0 */
+{ id:"l0", depth:"SURFACE", title:"The Surface — Reality Check", sub:"Before any Docker: understand the mission, set up your machine, lock in the rules.", nodes:[
+
+{ id:"n-goal", tag:"orientation", title:"What Inception actually is", hint:"3 containers, 1 network, 2 volumes, TLS — that's the whole game.",
+body:`
+<h4>The mission in one paragraph</h4>
+<p>You build a small web infrastructure <b>entirely with Docker Compose, inside a Virtual Machine</b>. Three services, each in its own container, each built from <b>your own Dockerfile</b> (pulling ready-made images like <code>wordpress:latest</code> is forbidden — instant fail):</p>
+<ul>
+<li><b>NGINX</b> — the only door into the infrastructure, listening on <b>port 443 only</b>, with TLSv1.2 or TLSv1.3.</li>
+<li><b>WordPress + php-fpm</b> — runs the site's PHP code. No nginx inside this container.</li>
+<li><b>MariaDB</b> — the database. Nothing else inside.</li>
+</ul>
+<p>Plus: a <b>docker network</b> connecting them, <b>two named volumes</b> (database data + website files) stored under <code>/home/&lt;login&gt;/data</code>, a domain <code>&lt;login&gt;.42.fr</code> pointing at your VM, and containers that <b>restart on crash</b>.</p>
+<h4>Why this project exists</h4>
+<p>42 wants you to understand what every devops tool hides: how a process becomes a container, how containers talk over virtual networks, how data outlives containers, and how TLS terminates at a reverse proxy. After Inception, docker-compose files at any job will read like plain English.</p>
+<div class="callout fast"><b>Fast path:</b> read the "Read the subject like an evaluator" node next and copy its forbidden-list onto a sticky note. 80% of fails on this project are rule violations, not technical bugs.</div>
+`},
+
+{ id:"n-vm", tag:"environment", title:"Virtual Machine setup", hint:"The project MUST run in a VM. Debian is the comfortable choice.",
+body:`
+<h4>Why a VM at all?</h4>
+<p>The subject mandates it. Pedagogically: Docker needs root-ish powers (the docker daemon controls the kernel's namespaces and cgroups), and clusters at 42 won't give you that on the host. A VM gives you a full Linux kernel where you're root. It also makes the <code>/home/&lt;login&gt;/data</code> volume requirement and <code>/etc/hosts</code> domain trick painless.</p>
+<h4>Recommended setup</h4>
+<ul>
+<li><b>Hypervisor:</b> VirtualBox (or UTM on Apple Silicon).</li>
+<li><b>OS inside the VM:</b> Debian (stable, huge docs, what most peers use). Give it 2+ CPUs, 4 GB RAM, 30 GB disk.</li>
+<li>Create a user with your <b>42 login</b> — the volumes must live in <code>/home/&lt;login&gt;/data</code>.</li>
+</ul>
+<h4>Install Docker Engine + Compose plugin</h4>
+<pre><code><span class="c"># as root, on Debian inside the VM</span>
+apt-get update && apt-get install -y ca-certificates curl
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg \\
+  -o /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) \\
+signed-by=/etc/apt/keyrings/docker.asc] \\
+https://download.docker.com/linux/debian \\
+$(. /etc/os-release && echo $VERSION_CODENAME) stable" \\
+  > /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y docker-ce docker-ce-cli containerd.io \\
+  docker-buildx-plugin docker-compose-plugin
+
+<span class="c"># let your user run docker without sudo</span>
+usermod -aG docker &lt;login&gt;   <span class="c"># then log out & back in</span>
+docker run hello-world        <span class="c"># sanity check</span></code></pre>
+<div class="callout info"><b>docker compose vs docker-compose:</b> the subject says <code>docker compose</code> (the v2 plugin, a subcommand of docker). The old standalone <code>docker-compose</code> v1 binary is dead — use the plugin.</div>
+<div class="callout fast"><b>Fast tip:</b> take a VM snapshot right after Docker installs cleanly. If you ever wreck the VM, you restore in 30 seconds instead of reinstalling Debian.</div>
+`},
+
+{ id:"n-rules", tag:"rules", title:"Read the subject like an evaluator", hint:"The forbidden list — each line here is an instant fail or a defense question.",
+body:`
+<h4>Hard requirements</h4>
+<ul>
+<li>Base images: <b>penultimate stable</b> Alpine <i>or</i> Debian (the one before the latest stable — check at build time, e.g. if Debian 13 is current stable, use Debian 12 <code>bookworm</code>).</li>
+<li><b>One Dockerfile per service</b>, written by you, built by your Makefile through <code>docker-compose.yml</code>.</li>
+<li>Image name == service name (<code>nginx</code>, <code>wordpress</code>, <code>mariadb</code>).</li>
+<li>Containers <b>restart in case of crash</b> (<code>restart: always</code> / <code>on-failure</code>).</li>
+<li>WordPress DB has <b>two users</b>; the admin's username must <b>not</b> contain <code>admin</code>/<code>administrator</code> in any form.</li>
+<li>Volumes' data lives in <code>/home/&lt;login&gt;/data</code> on the host, as <b>named volumes</b> (bind mounts forbidden for these two).</li>
+<li>Domain <code>&lt;login&gt;.42.fr</code> → your local IP.</li>
+<li><code>.env</code> file for variables is <b>mandatory</b>; Docker secrets strongly recommended for credentials.</li>
+</ul>
+<h4>The forbidden list — memorize it</h4>
+<ul>
+<li>❌ Pulling ready-made service images (only the bare Alpine/Debian base is allowed).</li>
+<li>❌ The <code>latest</code> tag.</li>
+<li>❌ Passwords in Dockerfiles. Credentials anywhere in git = <b>project failure</b>.</li>
+<li>❌ <code>network: host</code>, <code>--link</code>, <code>links:</code>.</li>
+<li>❌ Infinite-loop hacks as entrypoint or in scripts: <code>tail -f</code>, <code>sleep infinity</code>, <code>while true</code>, bare <code>bash</code>.</li>
+<li>❌ Any entry port other than <b>443</b> on NGINX (no port 80 redirect!).</li>
+</ul>
+<div class="callout trap"><b>The #1 silent killer:</b> a <code>secrets/</code> folder or <code>.env</code> committed to git. Add them to <code>.gitignore</code> in your very first commit, then run <code>git log --stat</code> before submitting to prove no credentials ever touched history.</div>
+<div class="callout info"><b>v5.3 additions:</b> this version of the subject also requires <code>README.md</code>, <code>USER_DOC.md</code> and <code>DEV_DOC.md</code> (see the Documentation level) and warns that the evaluator may ask you to make a <b>small live modification</b> during defense — you must genuinely understand your own files.</div>
+`},
+]},
+
+/* ================================================================ LEVEL 1 */
+{ id:"l1", depth:"LEVEL -1", title:"Docker Core Concepts", sub:"The dream logic. Master these six ideas and every config file becomes obvious.", nodes:[
+
+{ id:"n-cvm", tag:"concept", title:"Containers vs Virtual Machines", hint:"Same kernel, isolated worlds — why containers boot in milliseconds.",
+body:`
+<h4>The core difference</h4>
+<p>A <b>VM</b> emulates a whole computer: virtual hardware, its own kernel, its own OS. Heavy (GBs), slow to boot (minutes), strongly isolated.</p>
+<p>A <b>container</b> is just a <b>normal Linux process</b> on the host, wearing a blindfold. It shares the host's kernel but the kernel lies to it using two mechanisms:</p>
+<ul>
+<li><b>Namespaces</b> — isolation of <i>what the process can see</i>: its own process tree (PID namespace — its first process believes it is PID 1), its own network stack (NET), its own filesystem root (MNT), its own hostname (UTS), its own users (USER).</li>
+<li><b>cgroups</b> — limits on <i>what it can use</i>: CPU, RAM, I/O quotas.</li>
+</ul>
+<p>That's why a container starts in milliseconds and weighs MBs: there is no OS to boot, just a process to <code>fork()</code> inside new namespaces.</p>
+<h4>The Inception irony (a classic defense question)</h4>
+<p>"Why do we run Docker inside a VM if containers replace VMs?" — Because they solve <b>different problems</b>. The VM gives you a controlled, root-access Linux kernel anywhere (school cluster, macOS...). Docker then slices that kernel into cheap isolated services. VM = hardware-level isolation & portability of the <i>machine</i>; Docker = process-level isolation & portability of the <i>application</i>. Your README must contain exactly this comparison.</p>
+<div class="callout info"><b>Soundbite for defense:</b> "A VM virtualizes hardware and boots its own kernel; a container virtualizes the OS view of a process and shares the host kernel."</div>
+`},
+
+{ id:"n-images", tag:"concept", title:"Images, layers & the build cache", hint:"An image is a frozen filesystem; a container is that image, running.",
+body:`
+<h4>Image vs container</h4>
+<p>An <b>image</b> is an immutable, layered filesystem snapshot plus metadata (default command, env, ports). A <b>container</b> is a live instance of it: image + a thin writable layer + namespaces. Class vs object. One image → many containers.</p>
+<h4>Layers</h4>
+<p>Each Dockerfile instruction (<code>RUN</code>, <code>COPY</code>...) produces a <b>layer</b> — a diff of the filesystem. Layers stack via an overlay filesystem and are <b>cached</b>: if an instruction and its inputs didn't change, Docker reuses the cached layer instead of re-running it.</p>
+<pre><code>FROM debian:bookworm      <span class="c"># layer 0: base FS</span>
+RUN apt-get update && \\
+    apt-get install -y nginx  <span class="c"># layer 1: +nginx files</span>
+COPY conf/nginx.conf /etc/nginx/  <span class="c"># layer 2: +1 file</span></code></pre>
+<div class="callout fast"><b>Speed trick:</b> order Dockerfile lines from <i>least</i> to <i>most</i> frequently changed. Put <code>apt-get install</code> early and <code>COPY</code> of your configs/scripts late — then editing a config rebuilds in ~1s instead of re-downloading packages.</div>
+<div class="callout trap"><b>Why "latest" is banned:</b> <code>latest</code> is a moving target — your build could change behavior overnight and is not reproducible. Pin the codename/version: <code>FROM debian:bookworm</code> or <code>FROM alpine:3.21</code> (whatever is penultimate when you build).</div>
+<h4>Commands you'll live in</h4>
+<pre><code>docker images                 <span class="c"># list images</span>
+docker build -t mariadb .     <span class="c"># build from Dockerfile</span>
+docker history mariadb        <span class="c"># see the layers</span>
+docker system prune -a        <span class="c"># nuke cache (your fclean)</span></code></pre>
+`},
+
+{ id:"n-dockerfile", tag:"concept", title:"Dockerfile essentials", hint:"FROM, RUN, COPY, EXPOSE, ENTRYPOINT vs CMD — the whole vocabulary you need.",
+body:`
+<h4>The instructions that matter here</h4>
+<ul>
+<li><code>FROM debian:bookworm</code> — base layer. Always pinned, never <code>latest</code>.</li>
+<li><code>RUN cmd</code> — execute at <b>build time</b>, snapshot result as a layer. Chain with <code>&&</code> to keep layers few.</li>
+<li><code>COPY src dst</code> — copy files from build context (your <code>conf/</code> and <code>tools/</code> dirs) into the image.</li>
+<li><code>EXPOSE 443</code> — pure documentation of which port the service uses; it opens nothing by itself.</li>
+<li><code>ENTRYPOINT ["script.sh"]</code> / <code>CMD ["nginx","-g","daemon off;"]</code> — what runs at <b>container start</b>.</li>
+</ul>
+<h4>ENTRYPOINT vs CMD — defense favorite</h4>
+<p>Both define the startup command. <b>ENTRYPOINT</b> is the fixed executable; <b>CMD</b> provides default arguments (or the whole command if no entrypoint). If both exist, the container runs <code>ENTRYPOINT + CMD</code> concatenated. A clean Inception pattern:</p>
+<pre><code>COPY tools/entrypoint.sh /usr/local/bin/
+ENTRYPOINT ["entrypoint.sh"]   <span class="c"># setup script…</span>
+CMD ["mariadbd-safe"]          <span class="c"># …which ends by exec'ing CMD</span></code></pre>
+<p>…where the script's last line is <code>exec "$@"</code>. The setup runs once, then the real daemon <b>replaces</b> the script as PID 1.</p>
+<div class="callout info"><b>Exec form vs shell form:</b> <code>CMD ["nginx","-g","daemon off;"]</code> (JSON array) runs the binary directly. <code>CMD nginx -g "daemon off;"</code> wraps it in <code>/bin/sh -c</code>, so <i>sh</i> becomes PID 1 and signals don't reach nginx. Prefer exec form.</div>
+`},
+
+{ id:"n-pid1", tag:"concept", title:"PID 1, daemons & why tail -f is banned", hint:"The single most-asked defense question on this project.",
+body:`
+<h4>The rule</h4>
+<p>A container lives <b>exactly as long as its PID 1</b> (the first process in its PID namespace). When PID 1 exits, the container stops. So your main service must <b>be</b> PID 1 and must run in the <b>foreground</b>.</p>
+<h4>What's a daemon and why it breaks containers</h4>
+<p>Classically, services "daemonize": the launcher forks a background child and the parent exits — great on a normal server where systemd keeps things alive. Inside a container it's fatal: the parent (PID 1) exits → Docker thinks the service died → container stops, even though the daemon child was fine. Hence:</p>
+<pre><code>nginx -g "daemon off;"     <span class="c"># nginx in foreground</span>
+php-fpm83 -F               <span class="c"># -F = don't daemonize</span>
+mariadbd-safe              <span class="c"># stays in foreground</span></code></pre>
+<h4>Why <code>tail -f</code> / <code>sleep infinity</code> / <code>while true</code> are forbidden</h4>
+<p>Those hacks make a do-nothing process PID 1 just to keep the container alive while the real service runs detached behind it. Consequences:</p>
+<ul>
+<li>Docker monitors the wrong process — if your service crashes, the container looks "healthy" and <code>restart:</code> policies never fire.</li>
+<li>Signals (<code>docker stop</code> sends SIGTERM to PID 1) hit <code>tail</code>, not your service → no clean shutdown, 10s timeout then SIGKILL.</li>
+</ul>
+<h4>The <code>exec</code> trick — say this at defense</h4>
+<p>In an entrypoint script, <code>exec mariadbd</code> <b>replaces</b> the shell process with the daemon, keeping the same PID. Without <code>exec</code>, the shell stays PID 1 and the daemon is its child.</p>
+<pre><code>#!/bin/sh
+<span class="c"># ...do setup (init db, create users)...</span>
+exec "$@"    <span class="c"># shell is REPLACED by CMD → service is PID 1</span></code></pre>
+<div class="callout trap"><b>Nuance:</b> a <i>finite</i> wait-loop (e.g. retrying DB connection 10 times in the WordPress entrypoint) is fine — the ban is on infinite loops used to keep a container alive.</div>
+`},
+
+{ id:"n-compose", tag:"concept", title:"Docker Compose — the orchestrator", hint:"One YAML file describing services, network, volumes; one command to rule them.",
+body:`
+<h4>What it is</h4>
+<p>Compose is a declarative front-end for Docker: instead of running three <code>docker run</code> commands with twenty flags each, you describe the desired state in <code>docker-compose.yml</code> and run <code>docker compose up</code>. It builds images, creates the network and volumes, starts containers in dependency order, and wires env variables and secrets.</p>
+<h4>Vocabulary mapped to Inception</h4>
+<ul>
+<li><b>service</b> — one container definition (nginx / wordpress / mariadb).</li>
+<li><code>build:</code> — context + Dockerfile path; this is what makes Compose build <i>your</i> images.</li>
+<li><code>depends_on:</code> — start order (mariadb → wordpress → nginx). Note: it waits for <i>start</i>, not <i>readiness</i> — hence the retry loop in your WP entrypoint.</li>
+<li><code>restart: always</code> — the "restart on crash" requirement.</li>
+<li><code>env_file: .env</code> / <code>environment:</code> — variable injection.</li>
+<li><code>networks:</code>, <code>volumes:</code>, <code>secrets:</code> — top-level declarations + per-service attachment.</li>
+</ul>
+<h4>Daily driver commands</h4>
+<pre><code>docker compose -f srcs/docker-compose.yml up -d --build
+docker compose ps               <span class="c"># status of the stack</span>
+docker compose logs -f mariadb  <span class="c"># follow one service's logs</span>
+docker compose down             <span class="c"># stop+remove containers & network</span>
+docker compose down -v          <span class="c"># …and the named volumes (careful)</span>
+docker exec -it wordpress sh    <span class="c"># shell inside a container</span></code></pre>
+<div class="callout fast"><b>Fast tip:</b> while developing one service, run <code>docker compose up --build mariadb</code> (no <code>-d</code>) to see its logs live in your terminal. Iterating like this is 5× faster than rebuilding the whole stack each time.</div>
+`},
+
+{ id:"n-net", tag:"concept", title:"Docker networks & service DNS", hint:"Why nginx can literally say 'wordpress:9000' — and why host network is banned.",
+body:`
+<h4>How it works</h4>
+<p>Compose creates a user-defined <b>bridge network</b>: a virtual switch inside the kernel. Every container attached to it gets its own IP and network stack (NET namespace). Crucially, Docker runs an embedded <b>DNS server</b> on that network: <b>service names resolve to container IPs</b>. That's why your nginx config can say <code>fastcgi_pass wordpress:9000;</code> and WordPress's config can say <code>DB_HOST=mariadb</code> — no IPs anywhere.</p>
+<pre><code>networks:            <span class="c"># top-level in docker-compose.yml</span>
+  inception:
+    driver: bridge
+
+services:
+  nginx:
+    networks: [inception]
+    ports:
+      - "443:443"    <span class="c"># the ONLY published port</span></code></pre>
+<h4>Ports: published vs internal</h4>
+<p>Inside the network, all containers can reach each other on any port (3306, 9000…). Only <code>ports:</code> mappings punch through to the host. Inception rule: <b>only nginx publishes 443</b>. MariaDB's 3306 and php-fpm's 9000 stay internal — the outside world can never touch them. That's the security architecture the subject is teaching.</p>
+<h4>Why <code>network: host</code> and <code>links:</code> are forbidden</h4>
+<ul>
+<li><b>host network</b> removes network isolation entirely — the container shares the host's stack, every port is exposed, and the "nginx is the only entrypoint" guarantee dies. It defeats the whole lesson.</li>
+<li><b>links</b> is the deprecated pre-network legacy mechanism; user-defined networks with DNS replaced it years ago.</li>
+</ul>
+<div class="callout info"><b>Defense demo:</b> prove isolation with <code>docker exec -it wordpress ping -c1 mariadb</code> (works) vs trying <code>curl http://localhost:9000</code> from the VM (fails — not published).</div>
+`},
+
+{ id:"n-vol", tag:"concept", title:"Volumes: named vs bind mounts", hint:"How data survives `docker compose down` — and the /home/login/data trick.",
+body:`
+<h4>The problem volumes solve</h4>
+<p>A container's writable layer is <b>ephemeral</b> — destroy the container, lose the data. Your WordPress posts and database must survive rebuilds, so they live in <b>volumes</b>: directories managed outside the container lifecycle, mounted into it.</p>
+<h4>Bind mount vs named volume — README comparison</h4>
+<ul>
+<li><b>Bind mount</b> — you mount an explicit host path (<code>/home/me/stuff:/var/www</code>). Simple but host-dependent, no Docker management, permission headaches. <b>Forbidden</b> for the two main volumes here.</li>
+<li><b>Named volume</b> — Docker owns it (<code>docker volume ls</code>), referenced by name, declared in compose, portable, manageable. <b>Required</b> here.</li>
+</ul>
+<h4>The Inception twist: named volume AT a fixed host path</h4>
+<p>The subject demands named volumes <i>and</i> that data lands in <code>/home/&lt;login&gt;/data</code>. Normally named volumes live in <code>/var/lib/docker/volumes/...</code>. The standard solution: a named volume whose <b>local driver</b> is told to bind to your path:</p>
+<pre><code>volumes:
+  mariadb_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/&lt;login&gt;/data/mariadb
+  wordpress_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/&lt;login&gt;/data/wordpress</code></pre>
+<p>It's still a genuine named volume (shows in <code>docker volume ls</code>, satisfies the rule), but its storage physically sits where the subject wants. <b>The directories must exist before <code>up</code></b> — create them in your Makefile.</p>
+<div class="callout trap"><b>Gotcha:</b> with <code>driver_opts</code> bind volumes, <code>docker compose down -v</code> removes the volume <i>object</i> but not the files. To fully reset (fclean), also <code>rm -rf /home/&lt;login&gt;/data/*</code> — and know that re-running <code>up</code> with leftover DB files will skip your DB init script.</div>
+`},
+]},
+
+/* ================================================================ LEVEL 2 */
+{ id:"l2", depth:"LEVEL -2", title:"Project Skeleton", sub:"Build the structure once, correctly — every later step drops into place.", nodes:[
+
+{ id:"n-tree", tag:"structure", title:"Directory structure", hint:"The exact tree the subject expects. Create it all on day one.",
+body:`
+<h4>The canonical tree</h4>
+<pre><code>inception/
+├── Makefile
+├── README.md          <span class="c"># + USER_DOC.md, DEV_DOC.md (v5.3)</span>
+├── secrets/           <span class="c"># GITIGNORED — never committed</span>
+│   ├── credentials.txt
+│   ├── db_password.txt
+│   └── db_root_password.txt
+└── srcs/
+    ├── .env           <span class="c"># GITIGNORED too (it has names/domain;</span>
+    │                  <span class="c">#  keep real passwords in secrets/)</span>
+    ├── docker-compose.yml
+    └── requirements/
+        ├── mariadb/
+        │   ├── Dockerfile
+        │   ├── .dockerignore
+        │   ├── conf/        <span class="c"># 50-server.cnf …</span>
+        │   └── tools/       <span class="c"># entrypoint / init script</span>
+        ├── nginx/
+        │   ├── Dockerfile
+        │   ├── conf/        <span class="c"># nginx.conf / server block</span>
+        │   └── tools/
+        ├── wordpress/
+        │   ├── Dockerfile
+        │   ├── conf/        <span class="c"># www.conf (php-fpm pool)</span>
+        │   └── tools/       <span class="c"># wp setup script</span>
+        └── bonus/           <span class="c"># only if you do bonuses</span></code></pre>
+<h4>Conventions</h4>
+<ul>
+<li><code>conf/</code> = static config files COPY'd into images. <code>tools/</code> = shell scripts (entrypoints, init).</li>
+<li>Service name = image name = container name: <code>mariadb</code>, <code>wordpress</code>, <code>nginx</code>.</li>
+<li>First commit: <code>.gitignore</code> containing <code>secrets/</code> and <code>srcs/.env</code>.</li>
+</ul>
+<div class="callout fast"><b>Fast tip:</b> script the skeleton: one <code>mkdir -p</code> + <code>touch</code> one-liner and you're done in 30 seconds. Structure mistakes found at defense are the most annoying kind — eliminate them on day one.</div>
+`},
+
+{ id:"n-make", tag:"build", title:"The Makefile", hint:"Root of the repo. It must build everything via docker-compose.yml.",
+body:`
+<h4>What the subject requires</h4>
+<p>A Makefile at the repository root that <b>sets up the entire application</b> — i.e. builds the images using <code>docker-compose.yml</code> and starts the stack. Evaluators type <code>make</code> and expect a working site.</p>
+<h4>A clean, complete Makefile</h4>
+<pre><code>NAME    = inception
+COMPOSE = docker compose -f srcs/docker-compose.yml
+DATA    = /home/&lt;login&gt;/data
+
+all: up
+
+up:
+	mkdir -p $(DATA)/mariadb $(DATA)/wordpress
+	$(COMPOSE) up -d --build
+
+down:
+	$(COMPOSE) down
+
+stop:
+	$(COMPOSE) stop
+
+start:
+	$(COMPOSE) start
+
+logs:
+	$(COMPOSE) logs -f
+
+clean: down
+	docker system prune -af
+
+fclean: clean
+	$(COMPOSE) down -v
+	sudo rm -rf $(DATA)
+
+re: fclean all
+
+.PHONY: all up down stop start logs clean fclean re</code></pre>
+<h4>Line-by-line logic</h4>
+<ul>
+<li><code>mkdir -p</code> before <code>up</code> — the bind-backed named volumes need their host dirs to exist, or compose errors out.</li>
+<li><code>down</code> vs <code>stop</code> — <code>down</code> removes containers + network; <code>stop</code> just pauses them. Data in volumes survives both.</li>
+<li><code>fclean</code> — total reset: volumes objects removed, host data wiped. After this, <code>make</code> must rebuild a virgin working site (evaluators test exactly this).</li>
+</ul>
+<div class="callout trap"><b>Tabs, not spaces</b> — Makefile recipes require a real TAB character. And don't name a target after an existing file/dir or it'll be "up to date" forever (that's what <code>.PHONY</code> prevents).</div>
+`},
+
+{ id:"n-env", tag:"security", title:".env & Docker secrets", hint:"Mandatory .env, recommended secrets — and the git rule that fails projects.",
+body:`
+<h4>The two-tier system</h4>
+<ul>
+<li><b><code>.env</code></b> (mandatory) — non-secret configuration: domain, DB name, user names, paths. Compose auto-loads <code>srcs/.env</code> (it sits next to docker-compose.yml) and substitutes <code>\${VAR}</code> in the YAML.</li>
+<li><b>Docker secrets</b> (strongly recommended) — actual passwords. Files on the host that compose mounts into containers at <code>/run/secrets/&lt;name&gt;</code>, never appearing in <code>docker inspect</code>'s env list.</li>
+</ul>
+<h4>srcs/.env example</h4>
+<pre><code>DOMAIN_NAME=&lt;login&gt;.42.fr
+MYSQL_DATABASE=wordpress
+MYSQL_USER=wpuser
+WP_TITLE=inception
+WP_ADMIN_USER=chief        <span class="c"># NO 'admin' anywhere in it!</span>
+WP_ADMIN_EMAIL=chief@42.fr
+WP_USER=editor
+WP_USER_EMAIL=editor@42.fr</code></pre>
+<h4>Wiring secrets in compose</h4>
+<pre><code>secrets:
+  db_password:
+    file: ../secrets/db_password.txt
+  db_root_password:
+    file: ../secrets/db_root_password.txt
+  credentials:
+    file: ../secrets/credentials.txt
+
+services:
+  mariadb:
+    secrets: [db_password, db_root_password]</code></pre>
+<p>Inside the container, your script reads them: <code>DB_PASS=$(cat /run/secrets/db_password)</code>.</p>
+<h4>Why env vars aren't enough for passwords (README comparison)</h4>
+<p>Environment variables leak: <code>docker inspect</code> shows them, child processes inherit them, they end up in logs and shell history. Secrets are mounted as root-readable files in a tmpfs, scoped only to services that declare them. Env = configuration; secrets = credentials.</p>
+<div class="callout trap"><b>Instant fail:</b> any password in a Dockerfile, in docker-compose.yml literally, or in git history. <code>.gitignore</code> must cover <code>secrets/</code> and <code>.env</code> from commit #1.</div>
+`},
+
+{ id:"n-yml", tag:"build", title:"docker-compose.yml — full anatomy", hint:"The annotated master file tying all three services together.",
+body:`
+<h4>The complete skeleton</h4>
+<pre><code>services:
+  mariadb:
+    container_name: mariadb
+    build: ./requirements/mariadb
+    image: mariadb            <span class="c"># image name = service name</span>
+    env_file: .env
+    secrets: [db_password, db_root_password]
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks: [inception]
+    restart: always
+
+  wordpress:
+    container_name: wordpress
+    build: ./requirements/wordpress
+    image: wordpress
+    env_file: .env
+    secrets: [db_password, credentials]
+    volumes:
+      - wordpress_data:/var/www/html
+    networks: [inception]
+    depends_on: [mariadb]
+    restart: always
+
+  nginx:
+    container_name: nginx
+    build: ./requirements/nginx
+    image: nginx
+    env_file: .env
+    volumes:
+      - wordpress_data:/var/www/html
+    networks: [inception]
+    depends_on: [wordpress]
+    ports:
+      - "443:443"             <span class="c"># the ONLY door</span>
+    restart: always
+
+volumes:
+  mariadb_data:
+    driver: local
+    driver_opts: {type: none, o: bind, device: /home/&lt;login&gt;/data/mariadb}
+  wordpress_data:
+    driver: local
+    driver_opts: {type: none, o: bind, device: /home/&lt;login&gt;/data/wordpress}
+
+networks:
+  inception:
+    driver: bridge
+
+secrets:
+  db_password:        {file: ../secrets/db_password.txt}
+  db_root_password:   {file: ../secrets/db_root_password.txt}
+  credentials:        {file: ../secrets/credentials.txt}</code></pre>
+<h4>Key reading points</h4>
+<ul>
+<li><b>wordpress_data is mounted twice</b> — WordPress writes the PHP files, nginx reads them to serve static assets and locate scripts. Same files, two containers.</li>
+<li><b>depends_on chain</b> — mariadb → wordpress → nginx. Start order only; readiness is handled by your WP script's retry loop.</li>
+<li>The <code>networks:</code> section must exist explicitly (the subject requires the network line; default implicit networking isn't enough to show intent).</li>
+<li>No <code>version:</code> key needed — it's obsolete in Compose v2.</li>
+</ul>
+`},
+]},
+
+/* ================================================================ LEVEL 3 */
+{ id:"l3", depth:"LEVEL -3", title:"MariaDB — The Deepest Layer", sub:"Build the database first: everything above depends on it.", nodes:[
+
+{ id:"n-mdb-what", tag:"service 1/3", title:"What MariaDB is & its Dockerfile", hint:"A MySQL fork. Install it, open it to the network, run it in foreground.",
+body:`
+<h4>The 30-second theory</h4>
+<p>MariaDB is a community fork of MySQL (same protocol, same SQL, same port <b>3306</b>). WordPress stores literally everything — posts, users, comments, settings — as rows in this database. Your container must run <i>only</i> the DB server, listening on the docker network so the WordPress container can connect.</p>
+<h4>Dockerfile (Debian flavor)</h4>
+<pre><code>FROM debian:bookworm
+
+RUN apt-get update && \\
+    apt-get install -y mariadb-server && \\
+    rm -rf /var/lib/apt/lists/*
+
+COPY conf/50-server.cnf /etc/mysql/mariadb.conf.d/
+COPY tools/entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+EXPOSE 3306
+ENTRYPOINT ["entrypoint.sh"]</code></pre>
+<h4>The critical config change</h4>
+<p>Debian's default MariaDB binds to <code>127.0.0.1</code> — localhost <i>of its own container</i>, unreachable from WordPress. Override it:</p>
+<pre><code><span class="c"># conf/50-server.cnf</span>
+[mysqld]
+bind_address = 0.0.0.0   <span class="c"># listen on all container interfaces</span>
+port = 3306</code></pre>
+<div class="callout info"><b>Is 0.0.0.0 safe?</b> Yes — "all interfaces" here means all interfaces <i>of the container</i>, which only exist on the private docker network. 3306 is never published to the host. Great defense answer.</div>
+`},
+
+{ id:"n-mdb-init", tag:"service 1/3", title:"DB init script — the entrypoint", hint:"First boot: create DB + users from secrets. Then exec the server as PID 1.",
+body:`
+<h4>What must happen at first start</h4>
+<ol style="padding-left:20px;color:#c4cede">
+<li>If <code>/var/lib/mysql</code> is empty (fresh volume) → initialize the system tables, create the WordPress database, the regular user, and set the root password.</li>
+<li>If data already exists (volume persisted) → skip init entirely.</li>
+<li>Either way → <code>exec</code> the server in foreground.</li>
+</ol>
+<h4>tools/entrypoint.sh</h4>
+<pre><code>#!/bin/sh
+set -e
+DB_PASS=$(cat /run/secrets/db_password)
+ROOT_PASS=$(cat /run/secrets/db_root_password)
+
+if [ ! -d "/var/lib/mysql/mysql" ]; then
+    mariadb-install-db --user=mysql \\
+        --datadir=/var/lib/mysql >/dev/null
+
+    mariadbd --user=mysql --bootstrap &lt;&lt;EOF
+USE mysql;
+FLUSH PRIVILEGES;
+CREATE DATABASE \${MYSQL_DATABASE};
+CREATE USER '\${MYSQL_USER}'@'%' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON \${MYSQL_DATABASE}.* TO '\${MYSQL_USER}'@'%';
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$ROOT_PASS';
+FLUSH PRIVILEGES;
+EOF
+fi
+
+exec mariadbd --user=mysql   <span class="c"># PID 1, foreground</span></code></pre>
+<h4>Why each piece matters</h4>
+<ul>
+<li><code>'\${MYSQL_USER}'@'%'</code> — the <code>%</code> host wildcard allows connection <b>from other containers</b> (WordPress arrives from a different IP). <code>@'localhost'</code> only would block it.</li>
+<li><code>--bootstrap</code> runs SQL without starting the network server — clean one-shot init.</li>
+<li>The <code>if</code> guard is your <b>persistence</b>: second boot finds data, touches nothing.</li>
+<li><code>exec mariadbd</code> — the script vanishes, the DB becomes PID 1, signals and <code>restart:</code> work correctly.</li>
+</ul>
+<div class="callout fast"><b>Test in isolation before moving on:</b><br><code>docker compose up --build mariadb</code> then from another terminal:<br><code>docker exec -it mariadb mariadb -u wpuser -p wordpress</code> → <code>SHOW DATABASES;</code>. If this works, WordPress will connect. If not, fix it NOW — debugging the DB through WordPress errors is misery.</div>
+`},
+]},
+
+/* ================================================================ LEVEL 4 */
+{ id:"l4", depth:"LEVEL -4", title:"WordPress + php-fpm", sub:"The application layer: PHP runs here, but no web server does.", nodes:[
+
+{ id:"n-fpm", tag:"service 2/3", title:"php-fpm & FastCGI explained", hint:"Why this container has no nginx — and what listens on port 9000.",
+body:`
+<h4>The separation of powers</h4>
+<p>A classic LEMP server runs nginx + PHP on one machine. Inception splits them into containers, which forces you to understand how they actually talk:</p>
+<ul>
+<li><b>nginx</b> speaks HTTP to browsers but <b>cannot execute PHP</b>.</li>
+<li><b>php-fpm</b> (FastCGI Process Manager) is a pool of PHP worker processes that <b>only</b> executes PHP scripts. It speaks <b>FastCGI</b>, a binary protocol, on port <b>9000</b>.</li>
+</ul>
+<p>Flow for a page view: browser →(HTTPS):443→ nginx →(FastCGI):9000→ php-fpm runs <code>index.php</code> (querying mariadb:3306) → returns HTML → nginx sends it back encrypted. nginx serves static files (images, css) directly from the shared volume without touching PHP.</p>
+<h4>The one config you must change</h4>
+<p>By default php-fpm listens on a local <b>unix socket</b> — useless across containers. Make it listen on TCP 9000:</p>
+<pre><code><span class="c"># conf/www.conf (pool config)</span>
+[www]
+user = www-data
+group = www-data
+listen = 0.0.0.0:9000     <span class="c"># TCP, reachable from nginx container</span>
+pm = dynamic
+pm.max_children = 5
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 3</code></pre>
+<h4>Dockerfile sketch (Debian)</h4>
+<pre><code>FROM debian:bookworm
+RUN apt-get update && apt-get install -y \\
+    php-fpm php-mysql mariadb-client curl && \\
+    rm -rf /var/lib/apt/lists/*
+<span class="c"># wp-cli: the WordPress command-line installer</span>
+RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && \\
+    chmod +x wp-cli.phar && mv wp-cli.phar /usr/local/bin/wp
+COPY conf/www.conf /etc/php/8.2/fpm/pool.d/www.conf
+COPY tools/setup.sh /usr/local/bin/
+EXPOSE 9000
+ENTRYPOINT ["setup.sh"]
+CMD ["php-fpm8.2", "-F"]   <span class="c"># -F = Foreground = valid PID 1</span></code></pre>
+<div class="callout trap"><b>Check your PHP version path:</b> Debian bookworm ships php 8.2 (<code>/etc/php/8.2/fpm/...</code>); Alpine names things <code>php83-fpm</code> etc. One wrong path = config silently ignored.</div>
+`},
+
+{ id:"n-wpcli", tag:"service 2/3", title:"wp-cli setup script & the two users", hint:"Download, configure, install WordPress non-interactively — admin name rule!",
+body:`
+<h4>What wp-cli replaces</h4>
+<p>Normally you'd install WordPress by clicking through a browser wizard. That can't be automated or reproduced — so <b>wp-cli</b> does the same steps from the shell: download core files, write <code>wp-config.php</code>, create the database tables, create users.</p>
+<h4>tools/setup.sh</h4>
+<pre><code>#!/bin/sh
+set -e
+DB_PASS=$(cat /run/secrets/db_password)
+WP_ADMIN_PASS=$(grep admin /run/secrets/credentials | cut -d: -f2)
+WP_USER_PASS=$(grep user /run/secrets/credentials | cut -d: -f2)
+
+<span class="c"># 1. wait for mariadb to accept connections (FINITE loop = allowed)</span>
+i=0
+until mariadb -h mariadb -u "$MYSQL_USER" -p"$DB_PASS" \\
+      -e "SELECT 1" >/dev/null 2>&1; do
+    i=$((i+1)); [ $i -gt 30 ] && echo "DB timeout" && exit 1
+    sleep 2
+done
+
+<span class="c"># 2. install WordPress once (volume persists it afterwards)</span>
+if [ ! -f /var/www/html/wp-config.php ]; then
+    cd /var/www/html
+    wp core download --allow-root
+    wp config create --allow-root \\
+        --dbname="$MYSQL_DATABASE" --dbuser="$MYSQL_USER" \\
+        --dbpass="$DB_PASS" --dbhost=mariadb
+    wp core install --allow-root \\
+        --url="https://$DOMAIN_NAME" --title="$WP_TITLE" \\
+        --admin_user="$WP_ADMIN_USER" \\
+        --admin_password="$WP_ADMIN_PASS" \\
+        --admin_email="$WP_ADMIN_EMAIL"
+    wp user create --allow-root \\
+        "$WP_USER" "$WP_USER_EMAIL" \\
+        --role=author --user_pass="$WP_USER_PASS"
+    chown -R www-data:www-data /var/www/html
+fi
+
+exec "$@"   <span class="c"># hand PID 1 to php-fpm -F (the CMD)</span></code></pre>
+<h4>The user rules — evaluators always check</h4>
+<ul>
+<li><b>Two users</b> in the WordPress database, one being the administrator.</li>
+<li>The admin's username must <b>not contain</b> <code>admin</code>/<code>Admin</code>/<code>administrator</code> in any variation. Use your login, <code>chief</code>, <code>boss</code>, whatever.</li>
+<li>Verify at defense: <code>docker exec -it wordpress wp user list --allow-root</code>.</li>
+</ul>
+<div class="callout info"><b>Why the wait-loop is legal:</b> <code>depends_on</code> only orders container <i>start</i> — mariadb may still be initializing when this script runs. The loop is finite (60s cap), then the script ends by exec'ing php-fpm. It never loops to "keep the container alive", which is what's banned.</div>
+`},
+]},
+
+/* ================================================================ LEVEL 5 */
+{ id:"l5", depth:"LEVEL -5", title:"NGINX — The Only Door", sub:"TLS termination, reverse proxying, and the single entrypoint rule.", nodes:[
+
+{ id:"n-tls", tag:"service 3/3", title:"TLS, certificates & openssl", hint:"What HTTPS actually is, and how to forge your own certificate.",
+body:`
+<h4>TLS in 60 seconds</h4>
+<p><b>TLS</b> (Transport Layer Security) is the encryption layer under HTTPS. During the handshake, the server presents a <b>certificate</b> — a public key plus identity ("I am &lt;login&gt;.42.fr"), normally signed by a trusted authority (CA). Versions 1.0/1.1 have broken crypto and are banned everywhere; the subject mandates <b>TLSv1.2 or TLSv1.3 only</b>.</p>
+<h4>Self-signed certificates</h4>
+<p>A real CA won't sign a fake domain like <code>login.42.fr</code>, so you sign the certificate <b>yourself</b>. Encryption works identically; browsers just warn "unknown issuer" because no trusted CA vouches for you — expected and fine for this project (click through the warning).</p>
+<h4>Generate it at build time (Dockerfile)</h4>
+<pre><code>FROM debian:bookworm
+RUN apt-get update && \\
+    apt-get install -y nginx openssl && \\
+    rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /etc/nginx/ssl && \\
+    openssl req -x509 -nodes -days 365 \\
+      -newkey rsa:4096 \\
+      -keyout /etc/nginx/ssl/inception.key \\
+      -out  /etc/nginx/ssl/inception.crt \\
+      -subj "/C=MA/ST=region/L=city/O=42/CN=&lt;login&gt;.42.fr"
+
+COPY conf/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 443
+CMD ["nginx", "-g", "daemon off;"]</code></pre>
+<h4>Flag-by-flag</h4>
+<ul>
+<li><code>-x509</code> — output a self-signed certificate (not a signing request).</li>
+<li><code>-nodes</code> — "no DES": don't password-protect the key (nginx must read it unattended at boot).</li>
+<li><code>-newkey rsa:4096</code> — generate a fresh 4096-bit RSA private key.</li>
+<li><code>-subj ... CN=</code> — the Common Name must match your domain.</li>
+<li><code>daemon off;</code> — nginx stays in foreground = valid PID 1.</li>
+</ul>
+<div class="callout info"><b>Defense check they will run:</b> <code>openssl s_client -connect &lt;login&gt;.42.fr:443 -tls1_2</code> must succeed, and <code>curl http://&lt;login&gt;.42.fr</code> (port 80) must fail/refuse — nothing may answer on 80.</div>
+`},
+
+{ id:"n-nginxconf", tag:"service 3/3", title:"The server block & fastcgi_pass", hint:"The config that glues TLS, static files and php-fpm together.",
+body:`
+<h4>conf/nginx.conf (the server block)</h4>
+<pre><code>server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name &lt;login&gt;.42.fr;
+
+    ssl_certificate     /etc/nginx/ssl/inception.crt;
+    ssl_certificate_key /etc/nginx/ssl/inception.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;   <span class="c"># nothing older</span>
+
+    root  /var/www/html;        <span class="c"># the SHARED volume</span>
+    index index.php index.html;
+
+    location / {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    location ~ \\.php$ {
+        include fastcgi_params;
+        fastcgi_pass wordpress:9000;     <span class="c"># docker DNS magic</span>
+        fastcgi_param SCRIPT_FILENAME
+                      $document_root$fastcgi_script_name;
+    }
+}</code></pre>
+<h4>Reading it line by line</h4>
+<ul>
+<li><code>listen 443 ssl</code> and <b>no</b> <code>listen 80</code> anywhere — single entrypoint rule.</li>
+<li><code>ssl_protocols TLSv1.2 TLSv1.3;</code> — the literal subject requirement.</li>
+<li><code>root /var/www/html;</code> — same path where the WordPress container installed the files, via the shared <code>wordpress_data</code> volume. nginx serves CSS/images/uploads from here directly.</li>
+<li><code>try_files ... /index.php?$args</code> — WordPress permalink routing: any URL that isn't a real file falls through to WordPress's front controller.</li>
+<li><code>location ~ \\.php$</code> — every <code>.php</code> request is forwarded over FastCGI to <code>wordpress:9000</code>; <code>SCRIPT_FILENAME</code> tells php-fpm <i>which file on its own volume</i> to execute.</li>
+</ul>
+<div class="callout trap"><b>502 Bad Gateway?</b> nginx can't reach php-fpm. Check: is the wordpress container up? does <code>www.conf</code> listen on <code>0.0.0.0:9000</code> (not a unix socket)? same network? <b>White page / download of .php file?</b> Your fastcgi block isn't matching — check the location regex and SCRIPT_FILENAME.</div>
+`},
+
+{ id:"n-domain", tag:"network", title:"The domain: login.42.fr", hint:"No real DNS involved — one line in /etc/hosts does the trick.",
+body:`
+<h4>How DNS resolution actually starts</h4>
+<p>Before any DNS server is asked, every OS checks a local file: <code>/etc/hosts</code>. The subject exploits this: you map your domain to your own machine, so the browser inside the VM resolves <code>&lt;login&gt;.42.fr</code> → <code>127.0.0.1</code> → nginx's published port 443.</p>
+<pre><code><span class="c"># inside the VM (the machine where the browser runs)</span>
+echo "127.0.0.1 &lt;login&gt;.42.fr" | sudo tee -a /etc/hosts
+
+<span class="c"># verify</span>
+ping -c1 &lt;login&gt;.42.fr        <span class="c"># → 127.0.0.1</span>
+curl -k https://&lt;login&gt;.42.fr <span class="c"># → WordPress HTML (-k skips
+                                   self-signed cert check)</span></code></pre>
+<h4>Why WordPress must know its URL</h4>
+<p>WordPress stores its site URL in the database (<code>siteurl</code>/<code>home</code> options) and redirects anything else to it. That's why your wp-cli install used <code>--url="https://$DOMAIN_NAME"</code>. If you ever see redirect loops or broken styles, the stored URL and the URL you're browsing disagree.</p>
+<div class="callout trap"><b>Login ≠ placeholder:</b> everywhere this roadmap writes <code>&lt;login&gt;</code>, use your actual 42 login (the same as the VM user owning <code>/home/&lt;login&gt;/data</code>). Evaluators verify the domain matches the student being graded.</div>
+<div class="callout fast"><b>Fast tip:</b> put <code>DOMAIN_NAME=&lt;login&gt;.42.fr</code> in <code>.env</code> once and reference <code>\${DOMAIN_NAME}</code> in compose + scripts. Changing login for a peer-test machine becomes a one-line edit.</div>
+`},
+]},
+
+/* ================================================================ LEVEL 6 */
+{ id:"l6", depth:"LEVEL -6", title:"The Kick — Orchestration & Validation", sub:"Wake everything up at once, prove persistence, pass your own defense first.", nodes:[
+
+{ id:"n-orch", tag:"integration", title:"First full launch & debugging", hint:"make → three green containers. Here's the debug loop when they aren't.",
+body:`
+<h4>The moment of truth</h4>
+<pre><code>make
+docker compose -f srcs/docker-compose.yml ps
+<span class="c"># NAME        STATUS          PORTS
+# mariadb     Up 10 seconds
+# wordpress   Up 8 seconds
+# nginx       Up 6 seconds    0.0.0.0:443-&gt;443/tcp</span></code></pre>
+<p>Then browse <code>https://&lt;login&gt;.42.fr</code> → accept the self-signed warning → WordPress homepage. Log in at <code>/wp-admin</code> with your admin user.</p>
+<h4>The debug loop (you'll run this 50 times — make it muscle memory)</h4>
+<pre><code>docker compose logs -f &lt;service&gt;   <span class="c"># 90% of answers are here</span>
+docker exec -it &lt;service&gt; sh       <span class="c"># poke around inside</span>
+docker compose ps -a               <span class="c"># see crashed/restarting ones</span>
+docker inspect &lt;service&gt; | grep -A5 Mounts
+docker network inspect srcs_inception  <span class="c"># who's on the network</span></code></pre>
+<h4>Symptom → cause cheat-sheet</h4>
+<ul>
+<li><b>Container restarts in a loop</b> → its PID 1 exits. Read logs; usually a config typo or the entrypoint script crashing (add <code>set -x</code> to trace it).</li>
+<li><b>"Error establishing a database connection"</b> → wrong DB credentials in wp-config, or user created <code>@'localhost'</code> instead of <code>@'%'</code>, or bind_address still 127.0.0.1.</li>
+<li><b>502 from nginx</b> → php-fpm not listening on 0.0.0.0:9000.</li>
+<li><b>Old broken state haunting you</b> → <code>make fclean && make</code>. Stale volumes skip your init scripts; when in doubt, wipe.</li>
+</ul>
+<div class="callout fast"><b>Golden rule:</b> change one thing → rebuild one service → read its logs. Never change three things at once; you'll lose track of what fixed (or broke) it.</div>
+`},
+
+{ id:"n-persist", tag:"integration", title:"Proving persistence & restart", hint:"The exact experiments evaluators run on volumes and crash recovery.",
+body:`
+<h4>Test 1 — data survives down/up</h4>
+<pre><code><span class="c"># 1. log into wp-admin, publish a post or comment</span>
+make down      <span class="c"># containers & network destroyed</span>
+make           <span class="c"># rebuild & restart</span>
+<span class="c"># 2. the post/comment is still there → volumes work</span></code></pre>
+<p>Why it works: the rows live in <code>mariadb_data</code> → <code>/home/&lt;login&gt;/data/mariadb</code> on the host, untouched by container destruction. Your init scripts' <code>if</code>-guards see existing data and skip re-initialization.</p>
+<h4>Test 2 — data survives a VM reboot</h4>
+<pre><code>sudo reboot
+<span class="c"># after boot (docker service starts, restart:always
+#  brings containers back — or run make)</span>
+ls /home/&lt;login&gt;/data/mariadb     <span class="c"># real files, on disk</span></code></pre>
+<h4>Test 3 — crash recovery</h4>
+<pre><code>docker kill wordpress       <span class="c"># simulate a crash (SIGKILL)</span>
+docker compose ps           <span class="c"># wordpress: restarting → Up</span></code></pre>
+<p>This is <code>restart: always</code> doing its job — and it only works because your service is PID 1. If you'd used a <code>tail -f</code> hack, the real service could die without the container ever restarting.</p>
+<h4>Test 4 — single entrypoint</h4>
+<pre><code>curl -k https://&lt;login&gt;.42.fr      <span class="c"># 200 OK</span>
+curl http://&lt;login&gt;.42.fr          <span class="c"># connection refused (no 80!)</span>
+nmap -p- localhost                  <span class="c"># only 443 open (and ssh)</span></code></pre>
+<div class="callout fast"><b>Run all four tests yourself before the defense.</b> They are, almost verbatim, the evaluation checklist.</div>
+`},
+]},
+
+/* ================================================================ LEVEL 7 */
+{ id:"l7", depth:"LEVEL -7", title:"Documentation — Mandatory in v5.3", sub:"Three markdown files at the repo root. Skipping them = failing validation.", nodes:[
+
+{ id:"n-readme", tag:"docs", title:"README.md — with the 4 comparisons", hint:"Strict format: italic first line, 4 sections, AI-usage disclosure.",
+body:`
+<h4>Required structure</h4>
+<ul>
+<li><b>First line, italicized, exactly:</b> <i>This project has been created as part of the 42 curriculum by &lt;login&gt;.</i></li>
+<li><b>Description</b> — goal + brief overview of the project.</li>
+<li><b>Instructions</b> — how to build/run (<code>make</code>, prerequisites, /etc/hosts line).</li>
+<li><b>Resources</b> — docs/articles/tutorials you used <b>plus a description of how AI was used</b>: for which tasks and which parts (v5.3 requires this explicitly).</li>
+</ul>
+<h4>The four mandatory comparisons (project description section)</h4>
+<p>Write a short paragraph each — these double as defense answers:</p>
+<ul>
+<li><b>VM vs Docker</b> — VM virtualizes hardware with its own kernel (strong isolation, heavy); Docker isolates processes sharing the host kernel (light, fast, app-centric). Inception uses both: VM for a root-controlled kernel, Docker for the services.</li>
+<li><b>Secrets vs Environment variables</b> — env vars are visible via <code>docker inspect</code> and inherited by child processes; secrets are files mounted in tmpfs at <code>/run/secrets</code>, scoped per-service. Config in env, credentials in secrets.</li>
+<li><b>Docker network vs Host network</b> — user-defined bridge gives each container an isolated stack + DNS by service name, exposing only published ports; host mode strips all network isolation and would expose 3306/9000 directly. Bridge enforces "nginx is the only door".</li>
+<li><b>Volumes vs Bind mounts</b> — named volumes are Docker-managed, declared in compose, portable; bind mounts hardcode host paths with no management. The project uses named volumes (with a local-driver bind device to satisfy the /home/login/data rule).</li>
+</ul>
+<div class="callout trap"><b>It must be in English</b>, and the first line must match the required sentence <i>verbatim</i> (italics included). Evaluators check format before content.</div>
+`},
+
+{ id:"n-docs", tag:"docs", title:"USER_DOC.md & DEV_DOC.md", hint:"One file for the admin/end-user, one for the developer. Checklist inside.",
+body:`
+<h4>USER_DOC.md — for someone who just uses the stack</h4>
+<p>Plain language, no Docker jargon. Must explain:</p>
+<ul>
+<li><b>Services provided</b> — a WordPress website (nginx serving over HTTPS), its PHP runtime, its MariaDB database.</li>
+<li><b>Start / stop</b> — <code>make</code> to start, <code>make down</code> to stop, <code>make re</code> to rebuild from scratch.</li>
+<li><b>Access</b> — site at <code>https://&lt;login&gt;.42.fr</code>, admin panel at <code>https://&lt;login&gt;.42.fr/wp-admin</code>.</li>
+<li><b>Credentials</b> — where they live (<code>secrets/</code> files, <code>.env</code>), how to change them (edit file, <code>make re</code>).</li>
+<li><b>Health check</b> — <code>docker compose ps</code> all "Up", site responds, <code>docker compose logs</code> clean.</li>
+</ul>
+<h4>DEV_DOC.md — for a developer taking over the repo</h4>
+<ul>
+<li><b>Setup from scratch</b> — VM prerequisites, Docker install, creating <code>secrets/*.txt</code> and <code>.env</code> (list every variable), the /etc/hosts entry.</li>
+<li><b>Build & launch</b> — Makefile targets explained one by one; what compose does under the hood.</li>
+<li><b>Managing containers/volumes</b> — logs, exec, rebuild-one-service, inspecting volumes/network.</li>
+<li><b>Data layout & persistence</b> — <code>/home/&lt;login&gt;/data/{mariadb,wordpress}</code>, what each holds, what survives what (stop vs down vs down -v vs fclean).</li>
+</ul>
+<div class="callout fast"><b>Fast tip:</b> write these two files by literally pasting your own testing commands from this roadmap's Level -6 nodes. You already did the work — the docs are a transcript of it. 45 minutes, huge validation weight.</div>
+`},
+]},
+
+/* ================================================================ LEVEL 8 */
+{ id:"l8", depth:"LIMBO", title:"Limbo — Bonus & Defense", sub:"Only enter if the mandatory part is flawless. Then plant the idea and surface.", nodes:[
+
+{ id:"n-bonus", tag:"bonus", title:"The 5 bonuses, ranked by effort", hint:"Each bonus = its own container + Dockerfile. Mandatory must be PERFECT first.",
+body:`
+<h4>The golden rule</h4>
+<p>The bonus is graded <b>only if the mandatory part is perfect</b> — fully working, zero malfunctions. One mandatory bug = bonus ignored entirely. Do not start bonuses before passing all Level -6 tests.</p>
+<h4>Ranked easiest → hardest</h4>
+<ul>
+<li><b>1. Adminer</b> (~30 min) — a single PHP file that gives a web UI to your database. Container: php + the adminer.php file, reachable through a route or its own port. Great for demoing the DB at defense.</li>
+<li><b>2. Static website</b> (~1 h) — any language <b>except PHP</b>. A small HTML/CSS/JS resume site served by a tiny web server in its own container on another port.</li>
+<li><b>3. FTP server</b> (~2 h) — vsftpd container pointing at the <code>wordpress_data</code> volume. Mind passive-mode port ranges and user config. Test with an FTP client uploading a file that then appears on the site.</li>
+<li><b>4. Redis cache</b> (~2–3 h) — redis container + configure WordPress to use it (redis object-cache plugin via wp-cli, <code>WP_REDIS_HOST</code> define). Prove it works at defense with <code>redis-cli monitor</code> while clicking the site.</li>
+<li><b>5. Service of your choice</b> — anything you can <b>justify</b> (a monitoring dashboard like cAdvisor, a mail catcher, etc.). The justification is part of the grade.</li>
+</ul>
+<div class="callout info"><b>Bonus mechanics:</b> each service = its own Dockerfile in <code>srcs/requirements/bonus/&lt;name&gt;/</code>, its own container, its own volume if needed; you're allowed to open extra ports for them. Keep them on the same docker network.</div>
+<div class="callout fast"><b>Strategy:</b> Adminer + static site give 2 solid bonuses for under 2 hours of work. Redis and FTP are where most people burn a full day — only go there if defense isn't tomorrow.</div>
+`},
+
+{ id:"n-defense", tag:"defense", title:"Defense prep — Q&A drill", hint:"The questions evaluators actually ask, with the answers you've already learned.",
+body:`
+<h4>Concept questions (answers all live in this roadmap)</h4>
+<ul>
+<li><b>"Docker vs VM?"</b> → kernel sharing vs hardware virtualization (node: Containers vs VMs).</li>
+<li><b>"How do nginx and WordPress communicate?"</b> → FastCGI over TCP 9000 on the bridge network, DNS by service name.</li>
+<li><b>"Why no tail -f?"</b> → PID 1 must be the service: signals, restart policy, crash detection (node: PID 1).</li>
+<li><b>"ENTRYPOINT vs CMD?"</b> → fixed executable vs default args; script + <code>exec "$@"</code> pattern.</li>
+<li><b>"Why named volumes instead of bind mounts?"</b> → Docker-managed, declared, portable; bind device only used inside the volume driver to satisfy /home/login/data.</li>
+<li><b>"What's TLS, why 1.2/1.3 only?"</b> → encryption layer of HTTPS; older versions cryptographically broken.</li>
+<li><b>"Where are your passwords?"</b> → secrets files mounted at /run/secrets, gitignored; nothing in Dockerfiles/compose/git history.</li>
+</ul>
+<h4>Live checks they'll run</h4>
+<pre><code>docker compose ps                      <span class="c"># all Up, only 443 published</span>
+docker exec -it wordpress wp user list --allow-root  <span class="c"># 2 users, no 'admin'</span>
+docker exec -it mariadb mariadb -u root -p  <span class="c"># show databases, users</span>
+docker kill wordpress && docker compose ps  <span class="c"># auto-restarts</span>
+make fclean && make                    <span class="c"># full rebuild from zero works</span></code></pre>
+<h4>v5.3 special: the live modification</h4>
+<p>The evaluator may ask for a <b>small change done in minutes</b>: rename the network, change a port, add an env variable, tweak the nginx config. Practice once: change php-fpm's pool size, rebuild just wordpress, show it. If you wrote every file yourself (or genuinely understand AI-assisted parts — they <i>will</i> probe), this is free points.</p>
+<div class="callout trap"><b>Pre-submission audit:</b> ① <code>git log --stat</code> — no secrets ever committed. ② folder/file names match the subject exactly. ③ <code>make re</code> on a clean clone of your repo (fresh dir!) works end-to-end. ④ README first line verbatim. Do this the day BEFORE the defense.</div>
+`},
+]},
+];
+
+/* ================= state ================= */
+const KEY="inception-roadmap-v1";
+let done = new Set(JSON.parse(localStorage.getItem(KEY)||"[]"));
+const save = ()=>localStorage.setItem(KEY, JSON.stringify([...done]));
+const ALL = LEVELS.flatMap(l=>l.nodes.map(n=>({...n, level:l})));
+
+/* ================= render map ================= */
+const map = document.getElementById("map");
+LEVELS.forEach(lv=>{
+  const sec=document.createElement("section");
+  sec.className="level"; sec.id=lv.id;
+  sec.innerHTML=`<div class="level-head">
+      <span class="depth-tag">${lv.depth}</span>
+      <h2>${lv.title}</h2>
+      <div class="sub">${lv.sub}</div>
+    </div>
+    <div class="nodes">${lv.nodes.map(n=>`
+      <div class="node ${done.has(n.id)?"done":""}" data-id="${n.id}" tabindex="0" role="button" aria-label="${n.title}">
+        <div class="tag">${n.tag}</div>
+        <h3>${n.title}</h3>
+        <div class="hint">${n.hint}</div>
+        <button class="check" data-check="${n.id}" aria-label="toggle done">✓</button>
+      </div>`).join("")}
+    </div>`;
+  map.appendChild(sec);
+});
+
+/* ================= rail ================= */
+const rail=document.getElementById("rail");
+rail.innerHTML = LEVELS.map(l=>`<a href="#${l.id}" data-rail="${l.id}">
+  <span class="dpt">${l.depth.replace("LEVEL ","")}</span><span class="tick"></span>${l.title.split("—")[0].trim()}</a>`).join("");
+
+/* ================= progress ================= */
+function refreshProgress(){
+  const total=ALL.length, d=[...done].filter(id=>ALL.some(n=>n.id===id)).length;
+  const pct=total?Math.round(d/total*100):0;
+  document.getElementById("ringPct").textContent=pct+"%";
+  document.getElementById("ringCount").textContent=`${d} / ${total} nodes`;
+  document.getElementById("ring").style.background=
+    `conic-gradient(var(--amber) ${pct*3.6}deg, #1d2738 ${pct*3.6}deg)`;
+  LEVELS.forEach(l=>{
+    const all=l.nodes.every(n=>done.has(n.id));
+    const a=rail.querySelector(`[data-rail="${l.id}"]`);
+    if(a) a.classList.toggle("complete", all && l.nodes.length>0);
+  });
+}
+refreshProgress();
+
+document.getElementById("resetBtn").onclick=()=>{
+  if(confirm("Reset all progress?")){ done.clear(); save();
+    document.querySelectorAll(".node").forEach(n=>n.classList.remove("done"));
+    refreshProgress(); syncDrawerBtn(); }
+};
+
+/* ================= drawer ================= */
+const drawer=document.getElementById("drawer"), scrim=document.getElementById("scrim");
+let current=null;
+function openNode(id){
+  const i=ALL.findIndex(n=>n.id===id); if(i<0)return;
+  current=i; const n=ALL[i];
+  document.getElementById("dTag").textContent=`${n.level.depth} · ${n.tag}`;
+  document.getElementById("dTitle").textContent=n.title;
+  document.getElementById("dBody").innerHTML=n.body;
+  document.getElementById("dBody").scrollTop=0;
+  document.getElementById("dPrev").disabled = i===0;
+  document.getElementById("dNext").disabled = i===ALL.length-1;
+  syncDrawerBtn();
+  drawer.classList.add("open"); scrim.classList.add("open");
+  document.body.style.overflow="hidden";
+}
+function closeDrawer(){
+  drawer.classList.remove("open"); scrim.classList.remove("open");
+  document.body.style.overflow="";
+}
+function syncDrawerBtn(){
+  if(current==null)return;
+  const n=ALL[current], b=document.getElementById("dDone");
+  const isDone=done.has(n.id);
+  b.textContent=isDone?"completed ✓ (click to undo)":"mark as done ✓";
+  b.classList.toggle("is-done", isDone);
+}
+function toggleDone(id){
+  done.has(id)?done.delete(id):done.add(id); save();
+  document.querySelector(`.node[data-id="${id}"]`)?.classList.toggle("done", done.has(id));
+  refreshProgress(); syncDrawerBtn();
+}
+map.addEventListener("click",e=>{
+  const c=e.target.closest("[data-check]");
+  if(c){ e.stopPropagation(); toggleDone(c.dataset.check); return; }
+  const card=e.target.closest(".node");
+  if(card) openNode(card.dataset.id);
+});
+map.addEventListener("keydown",e=>{
+  if(e.key==="Enter"){const card=e.target.closest(".node"); if(card) openNode(card.dataset.id);}
+});
+document.getElementById("dClose").onclick=closeDrawer;
+scrim.onclick=closeDrawer;
+document.getElementById("dDone").onclick=()=>{ if(current!=null) toggleDone(ALL[current].id); };
+document.getElementById("dPrev").onclick=()=>{ if(current>0) openNode(ALL[current-1].id); };
+document.getElementById("dNext").onclick=()=>{ if(current<ALL.length-1) openNode(ALL[current+1].id); };
+window.addEventListener("keydown",e=>{
+  if(e.key==="Escape") closeDrawer();
+  if(drawer.classList.contains("open")){
+    if(e.key==="ArrowLeft"&&current>0) openNode(ALL[current-1].id);
+    if(e.key==="ArrowRight"&&current<ALL.length-1) openNode(ALL[current+1].id);
+  }
+});
+
+/* ================= speedrun toggle ================= */
+document.getElementById("srHead").onclick=()=>{
+  const b=document.getElementById("srBody");
+  b.classList.toggle("hidden");
+  document.getElementById("srToggle").textContent=b.classList.contains("hidden")?"[ show ]":"[ hide ]";
+};
+
+/* ================= scroll reveal + rail spy ================= */
+const io=new IntersectionObserver(es=>es.forEach(e=>{
+  if(e.isIntersecting) e.target.classList.add("vis");
+}),{threshold:.08});
+document.querySelectorAll(".level").forEach(l=>io.observe(l));
+
+const spy=new IntersectionObserver(es=>es.forEach(e=>{
+  const a=rail.querySelector(`[data-rail="${e.target.id}"]`);
+  if(a&&e.isIntersecting){
+    rail.querySelectorAll("a").forEach(x=>x.classList.remove("active"));
+    a.classList.add("active");
+  }
+}),{rootMargin:"-30% 0px -55% 0px"});
+document.querySelectorAll(".level").forEach(l=>spy.observe(l));
+</script>
+</body>
+</html>
