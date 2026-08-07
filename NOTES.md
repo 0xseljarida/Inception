@@ -80,6 +80,33 @@ The **network** namespace matters most here: each container gets its own interfa
 
 <br>
 
+### Where namespaces actually live
+
+A namespace is **not** the process control block. In Linux the PCB is `struct task_struct` — one per process, holding PID, state, memory map, open files.
+
+Each `task_struct` carries a pointer called `nsproxy`, pointing to the set of namespaces that process belongs to:
+
+```
+task_struct  (one per process)
+     └─ nsproxy ──> { pid_ns, net_ns, mnt_ns, uts_ns, ipc_ns, ... }
+```
+
+<p align="center"><img src="assets/task_struct-nsproxy.png" width="520"></p>
+<p align="center"><i>include/linux/sched.h — a pointer, not the namespaces themselves</i></p>
+
+And what it points to is just a box of pointers, one per namespace type:
+
+<p align="center"><img src="assets/struct-nsproxy.png" width="560"></p>
+<p align="center"><i>include/linux/nsproxy.h</i></p>
+
+The key word is **shared** — and the kernel says so itself in that comment: *"The nsproxy is shared by tasks which share all namespaces. As soon as a single namespace is cloned or unshared, the nsproxy is copied."*
+
+So every process in the same container points to the *same* namespace structs. That's what makes them one container — not a flag in the PCB, but a shared set of objects.
+
+This also explains the PID trick: `task_struct` stores several PIDs for one process, one per namespace level. So `sleep` really is 1 and 50862 at the same time — both are true, at different levels.
+
+<br>
+
 ### cgroups — what it uses
 
 Namespaces hide things but restrain nothing. A process that only sees its own filesystem can still eat every byte of RAM on the machine — exactly the hosting problem from section 01.
@@ -137,3 +164,41 @@ Docker's answer was the **image**: build your environment once — OS libraries,
 The image is the real invention, and the reason "works on my machine" stopped being an excuse.
 
 > **In short:** containers are a Linux feature. Docker is a very good tool for using it.
+
+---
+
+## 04 · The image — Docker's actual invention
+
+Namespaces and cgroups gave **isolation**. Union filesystems (AUFS, later OverlayFS) already gave **layering**. Neither belongs to Docker.
+
+What nobody had built was a way to **name, version, and ship** an environment. That's the image:
+
+> a layered filesystem with a manifest, identified by hash, taggable, and pushable to a registry.
+
+That's what made containers spread. It has since been standardized as the **OCI Image Spec**, so images aren't Docker-owned anymore — Podman, containerd and Kubernetes all use the same format.
+
+<br>
+
+### Image vs container
+
+> An **image** is a read-only filesystem.
+> A **container** is that filesystem + a **writable layer** on top, with a process running in it.
+
+Two containers started from the same image:
+
+```
+c1       8.19kB   (virtual 8.11MB)   ← wrote a file
+c2       4.10kB   (virtual 8.11MB)   ← didn't
+```
+
+- **virtual 8.11MB** — the shared image. Both read the same bytes on disk. Not copied.
+- **8.19kB / 4.10kB** — each container's own writable layer. Only what *it* changed.
+
+`c1` created `/note.txt`; `c2` never saw it. Same image, separate writable layers.
+
+The mechanism is **copy-on-write**: reads fall through to the image, writes copy the file up into your own layer first. 50 containers from one image = the image stored once, plus 50 tiny diffs.
+
+Two consequences:
+
+- **Images are immutable** — nothing a container does can change its image.
+- **The writable layer dies with the container** — `docker rm` deletes it. Which is exactly why volumes exist.
