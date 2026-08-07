@@ -3,7 +3,7 @@
 
 ---
 
-## 01 · Why containers were invented
+# 01 · Why containers were invented
 
 **One server. 200 customers. Each one wants their own isolated website.**
 
@@ -36,7 +36,7 @@ Three options existed:
 
 ---
 
-## 02 · What is a container?
+# 02 · What is a container?
 
 > **A container is just a normal Linux process on your kernel, with lies told to it.** yep we just lie to the process
 
@@ -53,7 +53,7 @@ Three options existed:
 
 <br>
 
-### Containers are much older than Docker
+## Containers are much older than Docker
 
 **None of this was invented in 2013.** The mechanism was already solved and in production:
 
@@ -70,7 +70,7 @@ Three options existed:
 
 <br>
 
-### The kernel has no "container"
+## The kernel has no "container"
 
 **There is no container object in Linux.** Nothing in the kernel is called that. It only ships namespaces and cgroups as general-purpose primitives — and *anyone* can use them:
 
@@ -87,7 +87,7 @@ Three options existed:
 
 <br>
 
-### Namespaces — what it sees
+## Namespaces — what it sees
 
 **A namespace is a private copy of some part of the system.** Instead of one global process list, one global network, one global hostname, the kernel gives a process its own version of each.
 
@@ -116,7 +116,7 @@ PID 1  sleep 300    ═══  PID 50862  sleep 300
 
 <br>
 
-### Where namespaces actually live
+## Where namespaces actually live
 
 **A namespace is not the process control block.** In Linux the PCB is `struct task_struct` — one per process, holding PID, state, memory map, open files.
 
@@ -145,7 +145,7 @@ task_struct  (one per process)
 
 <br>
 
-### cgroups — what it uses
+## cgroups — what it uses
 
 **Namespaces hide things but restrain nothing.** A process that only sees its own filesystem can still eat every byte of RAM on the machine — exactly the hosting problem from section 01.
 
@@ -169,7 +169,7 @@ task_struct  (one per process)
 
 ---
 
-## 03 · The situation that created Docker
+# 03 · The situation that created Docker
 
 **Everything above is plain Linux, and all of it predates Docker.** Yet almost nobody used containers, because a second problem was still wide open.
 
@@ -194,7 +194,7 @@ task_struct  (one per process)
 
 ---
 
-## 04 · The image — Docker's actual invention
+# 04 · The image — Docker's actual invention
 
 **Namespaces and cgroups gave isolation.** Union filesystems (AUFS, later OverlayFS) already gave **layering**. Neither belongs to Docker.
 
@@ -206,7 +206,7 @@ task_struct  (one per process)
 
 <br>
 
-### Image vs container
+## Image vs container
 
 > An **image** is a read-only filesystem.
 > A **container** is that filesystem + a **writable layer** on top, with a process running in it.
