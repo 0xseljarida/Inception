@@ -6,6 +6,7 @@
 ## Index
 
 * [01 · Why containers were invented](#01--why-containers-were-invented)
+    * [a · Container vs Virtual Machine](#a--container-vs-virtual-machine)
 * [02 · What is a container?](#02--what-is-a-container)
     * [a · Containers are much older than Docker](#a--containers-are-much-older-than-docker)
     * [b · Namespaces, what it sees](#b--namespaces-what-it-sees)
@@ -35,6 +36,14 @@ Three options existed:
 
 **Containers are the answer.** Keep one operating system, and make it **lie to each process about what machine it's on**.
 
+> **Note:** the "200 customers" framing above is a teaching device, not history.
+> A 2005 host would have answered "shared hosting", and the real waste containers
+> attacked was enterprise VM sprawl: thousands of VMs idling at 8% CPU.
+
+---
+
+## a · Container vs Virtual Machine
+
 **So containers exist for density and isolation**, not to replace VMs.
 
 | | Virtual Machine | Container |
@@ -47,10 +56,6 @@ Three options existed:
 | **Isolation** | strong, hardware level | weaker, same kernel |
 
 **The last row is the trade.** A VM's boundary is a hypervisor and hard to escape. A container's boundary is kernel bookkeeping, so a kernel bug crosses it.
-
-> **Note:** the "200 customers" framing above is a teaching device, not history.
-> A 2005 host would have answered "shared hosting", and the real waste containers
-> attacked was enterprise VM sprawl: thousands of VMs idling at 8% CPU.
 
 ---
 
@@ -69,7 +74,7 @@ Three options existed:
 | **Namespaces** | what a process can **see** | isolation |
 | **cgroups** | what a process can **use** | limits |
 
-<br>
+---
 
 ## a · Containers are much older than Docker
 
@@ -86,7 +91,7 @@ Three options existed:
 
 **Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC.
 
-<br>
+---
 
 ## b · Namespaces, what it sees
 
@@ -134,7 +139,7 @@ PID 1  sleep 300    ═══  PID 50862  sleep 300
 
 **The network namespace matters most here.** Each container gets its own interface, IP, routing table, and **its own set of ports**, which is why two containers can both listen on 9000 and never collide.
 
-<br>
+---
 
 ## c · Where namespaces actually live
 
@@ -170,7 +175,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
             ──> cred    ──> user_ns
 ```
 
-<br>
+---
 
 ## d · cgroups, what it uses
 
@@ -231,7 +236,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 
 **That's what made containers spread.** It has since been standardized as the **OCI Image Spec**, so images aren't Docker-owned anymore. Podman, containerd and Kubernetes all use the same format.
 
-<br>
+---
 
 ## a · Image vs container
 
