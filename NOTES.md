@@ -99,6 +99,13 @@ Three options existed:
 
 Instead of one global process list, one global network, one global hostname, the kernel keeps a second copy and hands it to the process. **The process never knows it got a copy.** It just looks around and reports what it finds.
 
+**Why use them?**
+
+- **Isolation.** Each process gets its own world and can't see anyone else's.
+- **Security.** You can run something you don't trust. If a malicious process tries to destroy the filesystem, it destroys *its own view* of it. The host and every other process are untouched.
+- **Containers.** Docker and LXC are built out of them.
+- **Sharing, on purpose.** Namespaces can be handed out deliberately: two containers can share a network namespace, or a mount point, while staying separate everywhere else.
+
 **There are 8 types:**
 
 🖥️ **`pid`** → its own process IDs.
@@ -226,13 +233,11 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 
 # 04 · The image · Docker's actual invention
 
-**Namespaces gave isolation, cgroups gave limits.** Union filesystems (AUFS, later OverlayFS) already gave **layering**. None of it belongs to Docker.
+> **An image is your whole setup saved as one file you can copy to any machine: the OS files, your app, and everything it needs, packed together.**
 
-**What nobody had built was a way to name, version, and ship an environment.** That's the image:
+**And that's Docker's actual invention.** Isolation came from namespaces, limits from cgroups, layering from union filesystems. None of that is Docker's. The image is.
 
-> a layered filesystem with a manifest, identified by hash, taggable, and pushable to a registry.
-
-**That's what made containers spread.** It has since been standardized as the **OCI Image Spec**, so images aren't Docker-owned anymore. Podman, containerd and Kubernetes all use the same format.
+**It's not Docker-owned anymore.** The format was standardized as the **OCI Image Spec**, so Podman, containerd and Kubernetes all use the same images.
 
 ---
 
