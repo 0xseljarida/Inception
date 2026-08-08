@@ -59,8 +59,8 @@ Three options existed:
 
 ```
 1979  chroot              isolate a filesystem
-2000  FreeBSD Jails       filesystem + processes + network
-2004  Solaris Containers  the word ships in a product
+2000  FreeBSD Jails       isolate filesystem + processes + users + one IP
+2004  Solaris Containers  the word ships in a product (first use of "container" in IT)
 2006  cgroups             Google adds resource limits to Linux
 2008  LXC                 first full container manager for Linux
 2013  Docker              built on LXC at first
