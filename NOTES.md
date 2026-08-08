@@ -38,7 +38,7 @@ Three options existed:
 
 # 02 · What is a container?
 
-> **A container is just a normal Linux process on your kernel, with lies told to it.** yep we just lie to the process
+> **A container is just a normal Linux process on your kernel, with lies told to it. yep we just lie to the process !**
 
 **No virtual machine boots. No OS is emulated.** Run `ps` on the host and you find an ordinary process among your others — same kernel, same scheduler.
 
