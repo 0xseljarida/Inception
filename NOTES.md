@@ -241,26 +241,8 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 
 ---
 
-## a · Image vs container
+## a · Docker images vs. containers
 
-> An **image** is a read-only filesystem.
-> A **container** is that filesystem + a **writable layer** on top, with a process running in it.
+**A Docker image is a blueprint** that is executed in a Docker container. You add layers of core functionality to an image, and that image is then used to create a running container.
 
-Two containers started from the same image:
-
-```
-c1       8.19kB   (virtual 8.11MB)   ← wrote a file
-c2       4.10kB   (virtual 8.11MB)   ← didn't
-```
-
-- **virtual 8.11MB** is the shared image. Both read the same bytes on disk. Not copied.
-- **8.19kB / 4.10kB** is each container's own writable layer. Only what *it* changed.
-
-**`c1` created `/note.txt`; `c2` never saw it.** Same image, separate writable layers.
-
-**The mechanism is copy-on-write.** Reads fall through to the image; writes copy the file up into your own layer first. 50 containers from one image = the image stored once, plus 50 tiny diffs.
-
-**Two consequences:**
-
-- **Images are immutable.** Nothing a container does can change its image.
-- **The writable layer dies with the container.** `docker rm` deletes it, which is exactly why volumes exist.
+**In other words, a container is a running instance of an image.** You can create many containers from the same image, each with its own unique data and state.
