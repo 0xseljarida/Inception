@@ -3,6 +3,20 @@
 
 ---
 
+## Index
+
+* [01 · Why containers were invented](#01--why-containers-were-invented)
+* [02 · What is a container?](#02--what-is-a-container)
+    * [a · Containers are much older than Docker](#a--containers-are-much-older-than-docker)
+    * [b · Namespaces, what it sees](#b--namespaces-what-it-sees)
+    * [c · Where namespaces actually live](#c--where-namespaces-actually-live)
+    * [d · cgroups, what it uses](#d--cgroups-what-it-uses)
+* [03 · The situation that created Docker](#03--the-situation-that-created-docker)
+* [04 · The image · Docker's actual invention](#04--the-image--dockers-actual-invention)
+    * [a · Image vs container](#a--image-vs-container)
+
+---
+
 # 01 · Why containers were invented
 
 **One server. 200 customers. Each one wants their own isolated website.**
@@ -57,7 +71,7 @@ Three options existed:
 
 <br>
 
-## Containers are much older than Docker
+## a · Containers are much older than Docker
 
 **None of this was invented in 2013.** The mechanism was already solved and in production:
 
@@ -74,7 +88,7 @@ Three options existed:
 
 <br>
 
-## Namespaces · what it sees
+## b · Namespaces, what it sees
 
 > **A namespace gives a process its own private view of one part of the system.**
 
@@ -122,7 +136,7 @@ PID 1  sleep 300    ═══  PID 50862  sleep 300
 
 <br>
 
-## Where namespaces actually live
+## c · Where namespaces actually live
 
 **A namespace is not the process control block.** In Linux the PCB is `struct task_struct`: one per process, holding PID, state, memory map, open files.
 
@@ -158,7 +172,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 
 <br>
 
-## cgroups · what it uses
+## d · cgroups, what it uses
 
 **Namespaces hide things but restrain nothing.** A process that only sees its own filesystem can still eat every byte of RAM on the machine, exactly the hosting problem from section 01.
 
@@ -219,7 +233,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 
 <br>
 
-## Image vs container
+## a · Image vs container
 
 > An **image** is a read-only filesystem.
 > A **container** is that filesystem + a **writable layer** on top, with a process running in it.
