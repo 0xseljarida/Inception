@@ -44,7 +44,7 @@ Three options existed:
 
 ## a · Container vs Virtual Machine
 
-**So containers exist for density and isolation**, not to replace VMs.
+**Containers exist for density and isolation**, not to replace VMs.
 
 | | Virtual Machine | Container |
 |:--|:--|:--|
@@ -178,7 +178,7 @@ task_struct  (one per process)
 **One exception: `user` is not in nsproxy.** Look at the screenshot, there's no `user_ns` field. It lives in `struct cred`, the process's credentials, because it's about *permissions*, not resources:
 
 ```
-task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
+task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for_children
             ──> cred    ──> user_ns
 ```
 
@@ -227,7 +227,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 | **A daemon** | a background service managing images, containers, networks, and the API |
 | **A CLI** | `docker run` instead of a page of manual setup |
 
-> **In short:** containers are a Linux feature. Docker is a very good tool for using it.
+> **In short:** containers are an operating-system feature. On Linux that's namespaces + cgroups, and Docker is a very good tool for using them.
 
 ---
 
