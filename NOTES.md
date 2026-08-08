@@ -203,15 +203,15 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 
 # 03 · The situation that created Docker
 
-**Everything above already existed, and none of it was Docker's.** Yet containers stayed a specialist tool: hosting providers and infrastructure teams ran them at scale, ordinary developers never touched one. A second problem was still wide open.
+**Everything above already existed, and none of it was Docker's.** Yet containers stayed a specialist tool: hosting providers ran them at scale, ordinary developers never touched one.
 
-**A developer writes code. It runs perfectly on their machine.** The tester pulls it and it breaks: a missing library, a different language version, an environment variable that only exists on the first machine. Nobody can say *why*, because nobody can see the difference.
+> **"It works on my machine."**
 
-**There was no way to hand someone your exact environment.** Building a container meant assembling the filesystem by hand, choosing namespaces, wiring the network, then repeating all of it on every machine.
+**Because there was no way to hand someone your environment.** Building a container meant assembling a filesystem by hand, choosing namespaces, wiring the network, then repeating all of it on every machine.
 
 > **Isolation was solved. Distribution wasn't.**
 
-**Docker's answer was the image.** Build your environment once (OS libraries, language runtime, dependencies, config) and ship it as a single artifact that runs identically on any machine with a compatible kernel and CPU architecture.
+**Docker's answer was the image:** build the environment once, ship it as one artifact.
 
 | | |
 |:--|:--|
@@ -219,8 +219,6 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 | **A registry** | somewhere to publish and download them |
 | **A daemon** | a background service doing the kernel work for you |
 | **A CLI** | `docker run` instead of a page of manual setup |
-
-**That's the reason "works on my machine" stopped being an excuse.**
 
 > **In short:** containers are a Linux feature. Docker is a very good tool for using it.
 
