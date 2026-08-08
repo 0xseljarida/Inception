@@ -89,18 +89,37 @@ Three options existed:
 
 ## Namespaces — what it sees
 
-**A namespace is a private copy of some part of the system.** Instead of one global process list, one global network, one global hostname, the kernel gives a process its own version of each.
+> **A namespace gives a process its own private view of one part of the system.**
 
-**The process never knows it got a copy.** It just looks around and reports what it finds.
+Instead of one global process list, one global network, one global hostname, the kernel keeps a second copy and hands it to the process. **The process never knows it got a copy** — it just looks around and reports what it finds.
 
-| | Isolates | The process believes |
-|:--|:--|:--|
-| `pid` | process IDs | it's the first process on the machine |
-| `mnt` | filesystem | the disk is the image's filesystem |
-| `net` | network | it owns a machine with its own IP |
-| `uts` | hostname | it has its own machine name |
-| `ipc` | shared memory | nothing else shares memory with it |
-| `user` | UID / GID | it is root |
+**There are 8 types:**
+
+🖥️ **`pid`** → its own process IDs.
+&nbsp;&nbsp;&nbsp;&nbsp;PID 1 inside a container is not PID 1 on the host.
+
+🌐 **`net`** → its own interfaces, IPs, routing table, firewall rules, **ports**.
+&nbsp;&nbsp;&nbsp;&nbsp;Two containers can both listen on 9000 without colliding.
+
+📂 **`mnt`** → its own mount points and filesystem tree.
+&nbsp;&nbsp;&nbsp;&nbsp;A container's `/etc` is a different `/etc` than the host's.
+
+👤 **`user`** → its own UID / GID mapping.
+&nbsp;&nbsp;&nbsp;&nbsp;A process can be root inside while being nobody outside.
+
+🏷️ **`uts`** → its own hostname and domain name.
+&nbsp;&nbsp;&nbsp;&nbsp;The container calls itself `mariadb`; the host never changed name.
+
+🔗 **`ipc`** → its own shared memory, message queues, semaphores.
+&nbsp;&nbsp;&nbsp;&nbsp;Nothing else can attach to its memory segments.
+
+📦 **`cgroup`** → its own view of the cgroup tree.
+&nbsp;&nbsp;&nbsp;&nbsp;It can't see where it sits in the host's hierarchy.
+
+⏰ **`time`** → its own boot and monotonic clock. *(Linux 5.6+)*
+&nbsp;&nbsp;&nbsp;&nbsp;A container can believe it booted at a different moment.
+
+<br>
 
 One `sleep` command, seen from both sides at once:
 
@@ -141,7 +160,43 @@ task_struct  (one per process)
 
 **Every process in the same container points to the same namespace structs.** That's what makes them one container — not a flag in the PCB, but a shared set of objects.
 
-**This also explains the PID trick.** `task_struct` stores several PIDs for one process, one per namespace level. So `sleep` really is 1 and 50862 at the same time — both are true, at different levels.
+**One exception: `user` is not in nsproxy.** Look at the screenshot — there's no `user_ns` field. It lives in `struct cred`, the process's credentials, because it's about *permissions*, not resources:
+
+```
+task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
+            ──> cred    ──> user_ns
+```
+
+<br>
+
+## How a pid namespace tracks processes
+
+**A namespace is a place, not a record.** It stores information about a *resource*, never about who is using it — `task_struct` is what describes a process.
+
+**The `pid` namespace is the near-exception**, because process IDs *are* the resource it isolates. Inside `struct pid_namespace`:
+
+| Field | Holds |
+|:--|:--|
+| `idr` | the PID → process map **for this namespace only**, numbering from 1 |
+| `child_reaper` | the task acting as **init** here — adopts orphans, reaps zombies |
+| `parent` | pointer to the parent pid namespace |
+| `level` | how deep it's nested |
+
+**`idr` is a radix tree**, and it does *not* store `task_struct` directly:
+
+```
+pid_namespace
+  └─ idr (radix tree)
+       ├─ PID 1 ──> struct pid ──> task_struct
+       ├─ PID 2 ──> struct pid ──> task_struct
+       └─ PID 7 ──> struct pid ──> task_struct
+```
+
+**Why `struct pid` in the middle?** Because one process has **several PIDs**, one per namespace level. A plain integer couldn't express that — `struct pid` holds the whole list. So `sleep` really is 1 and 50862 at the same time; both are true, at different levels.
+
+**PID namespaces are a tree, not a flat set.** That `parent` pointer means the host can see into every container, but a container can never see out or sideways.
+
+> **`child_reaper` is why PID 1 matters in Inception.** Your container's main process *is* the reaper. If it can't handle signals and reap children, the container ignores `docker stop` and accumulates zombies — the reason the subject bans `tail -f` and `bash` as PID 1.
 
 <br>
 
