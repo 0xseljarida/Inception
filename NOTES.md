@@ -203,7 +203,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 
 # 03 · The situation that created Docker
 
-**Everything above is plain Linux, and all of it predates Docker.** Yet almost nobody used containers, because a second problem was still wide open.
+**Everything above already existed, and none of it was Docker's.** Yet containers stayed a specialist tool: hosting providers and infrastructure teams ran them at scale, ordinary developers never touched one. A second problem was still wide open.
 
 **A developer writes code. It runs perfectly on their machine.** The tester pulls it and it breaks: a missing library, a different language version, an environment variable that only exists on the first machine. Nobody can say *why*, because nobody can see the difference.
 
