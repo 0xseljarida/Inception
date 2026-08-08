@@ -104,6 +104,10 @@ Instead of one global process list, one global network, one global hostname, the
 
 <br>
 
+**`user` landing in 2013 is why the timing worked.** Docker shipped the same year. Before user namespaces, root-in-container was root-on-host — the missing piece for running untrusted workloads.
+
+<br>
+
 One `sleep` command, seen from both sides at once:
 
 ```
