@@ -12,9 +12,11 @@
     * [b · Namespaces, what it sees](#b--namespaces-what-it-sees)
     * [c · Where namespaces actually live](#c--where-namespaces-actually-live)
     * [d · cgroups, what it uses](#d--cgroups-what-it-uses)
-* [03 · The situation that created Docker](#03--the-situation-that-created-docker)
-* [04 · The image · Docker's actual invention](#04--the-image--dockers-actual-invention)
-    * [a · Docker images vs. containers](#a--docker-images-vs-containers)
+* [03 · Docker](#03--docker)
+* [04 · Docker image](#04--docker-image)
+    * [a · Definition](#a--definition)
+    * [b · Docker images vs. containers](#b--docker-images-vs-containers)
+    * [c · Image layers](#c--image-layers)
 
 ---
 
@@ -208,13 +210,11 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 ---
 
-# 03 · The situation that created Docker
+# 03 · Docker
 
-**Everything above already existed, and none of it was Docker's.** Yet containers stayed a specialist tool: hosting providers ran them at scale, ordinary developers never touched one.
+> **Docker is a tool that builds, ships and runs containers.**
 
-> **"It works on my machine."**
-
-**Because there was no way to hand someone your environment.** Building a container meant assembling a filesystem by hand, choosing namespaces, wiring the network, then repeating all of it on every machine.
+Containers already worked, but building one meant assembling a filesystem by hand, choosing namespaces, wiring the network, then repeating all of it on every machine.
 
 > **Isolation was solved. Distribution wasn't.**
 
@@ -231,18 +231,52 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 ---
 
-# 04 · The image · Docker's actual invention
+# 04 · Docker image
+
+## a · Definition
 
 > **An image is your whole setup saved as one file you can copy to any machine: the OS files, your app, and everything it needs, packed together.**
 
-**And that's Docker's actual invention.** Isolation came from namespaces, limits from cgroups, layering from union filesystems. None of that is Docker's. The image is.
+**It's Docker's actual invention.** Isolation came from namespaces, limits from cgroups, layering from union filesystems. None of that is Docker's. The image is.
 
 **It's not Docker-owned anymore.** The format was standardized as the **OCI Image Spec**, so Podman, containerd and Kubernetes all use the same images.
 
 ---
 
-## a · Docker images vs. containers
+## b · Docker images vs. containers
 
 **A Docker image is a blueprint** that is executed in a Docker container. You add layers of core functionality to an image, and that image is then used to create a running container.
 
 **In other words, a container is a running instance of an image.** You can create many containers from the same image, each with its own unique data and state.
+
+---
+
+## c · Image layers
+
+**An image is not one flat blob. It's a stack of layers, and a layer is a set of file changes.**
+
+Each build instruction produces one:
+
+```dockerfile
+FROM debian:bookworm     → layer 1: the whole base filesystem
+RUN apt install nginx    → layer 2: only the files apt added
+COPY nginx.conf /etc/    → layer 3: one file
+```
+
+Stacked, they look like this:
+
+```
+layer 3   nginx.conf
+layer 2   /usr/sbin/nginx, /etc/nginx/...
+layer 1   /bin, /etc, /usr, /var ...
+──────────────────────────────────────
+the container sees:  all of it, merged into one /
+```
+
+**A union filesystem does the merging** (OverlayFS on this machine). The process opening `/etc/nginx.conf` has no idea it came from layer 3. It just sees a normal filesystem.
+
+**Why layers matter:**
+
+- **Shared.** Ten images built `FROM debian:bookworm` store that base layer **once**.
+- **Cached.** On rebuild, unchanged layers are reused, which is why the order of your instructions changes build time.
+- **Read-only.** Every layer is frozen. A running container adds one writable layer on top, and that one dies with the container.
