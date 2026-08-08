@@ -70,8 +70,6 @@ Three options existed:
 
 <br>
 
-<br>
-
 ## Namespaces — what it sees
 
 > **A namespace gives a process its own private view of one part of the system.**
