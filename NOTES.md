@@ -34,6 +34,10 @@ Three options existed:
 
 **The last row is the trade.** A VM's boundary is a hypervisor and hard to escape. A container's boundary is kernel bookkeeping, so a kernel bug crosses it.
 
+> **Note:** the "200 customers" framing above is a teaching device, not history.
+> A 2005 host would have answered "shared hosting", and the real waste containers
+> attacked was enterprise VM sprawl: thousands of VMs idling at 8% CPU.
+
 ---
 
 # 02 · What is a container?
@@ -62,7 +66,7 @@ Three options existed:
 2000  FreeBSD Jails       isolate filesystem + processes + users + one IP
 2004  Solaris Containers  the word ships in a product
 2006  cgroups             Google adds resource limits to Linux
-2008  LXC                 first full container manager for Linux
+2008  LXC                 first container manager using only mainline kernel features
 2013  Docker              built on LXC at first
 ```
 
@@ -104,10 +108,6 @@ Instead of one global process list, one global network, one global hostname, the
 
 <br>
 
-**`user` landing in 2013 is why the timing worked.** Docker shipped the same year. Before user namespaces, root-in-container was root-on-host, the missing piece for running untrusted workloads.
-
-<br>
-
 One `sleep` command, seen from both sides at once:
 
 ```
@@ -140,6 +140,8 @@ task_struct  (one per process)
 
 <p align="center"><img src="assets/struct-nsproxy.png" width="560"></p>
 <p align="center"><i>include/linux/nsproxy.h</i></p>
+
+**`pid` is the odd one.** The field is `pid_ns_for_children`, not the process's own pid namespace. A process never changes pid namespace once it exists, so nsproxy carries the one its *children* will get. The kernel says this in the comment above the struct: the task's own is reached through `task_active_pid_ns()`.
 
 **The key word is shared**, and the kernel says so itself in that comment:
 
@@ -190,7 +192,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 
 > **Isolation was solved. Distribution wasn't.**
 
-**Docker's answer was the image.** Build your environment once (OS libraries, language runtime, dependencies, config) and ship it as a single artifact that runs identically anywhere.
+**Docker's answer was the image.** Build your environment once (OS libraries, language runtime, dependencies, config) and ship it as a single artifact that runs identically on any machine with a compatible kernel and CPU architecture.
 
 | | |
 |:--|:--|
