@@ -70,21 +70,6 @@ Three options existed:
 
 <br>
 
-## The kernel has no "container"
-
-**There is no container object in Linux.** Nothing in the kernel is called that. It only ships namespaces and cgroups as general-purpose primitives — and *anyone* can use them:
-
-| Uses namespaces / cgroups | For what |
-|:--|:--|
-| **systemd** | every service unit lives in its own cgroup; `PrivateTmp=` and `ProtectSystem=` are mnt namespaces |
-| **Chrome / Firefox** | renderer sandbox — user + pid + net namespaces, so a compromised tab sees nothing |
-| **Android** | each app in its own uid and namespace set |
-| **flatpak / snap / bubblewrap** | desktop app sandboxing |
-| **`unshare` / `nsenter`** | plain command-line access, no daemon needed |
-| **VPNs** | a net namespace to route one app through the tunnel |
-
-> **"Container" is a userspace word** for a particular combination of these. Docker is just its most famous consumer.
-
 <br>
 
 ## Namespaces — what it sees
