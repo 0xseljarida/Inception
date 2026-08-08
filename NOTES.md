@@ -217,7 +217,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 |:--|:--|
 | **Images** | a packaged filesystem you build once and ship anywhere |
 | **A registry** | somewhere to publish and download them |
-| **A daemon** | a background service doing the kernel work for you |
+| **A daemon** | a background service managing images, containers, networks, and the API |
 | **A CLI** | `docker run` instead of a page of manual setup |
 
 > **In short:** containers are a Linux feature. Docker is a very good tool for using it.
