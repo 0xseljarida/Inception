@@ -14,7 +14,7 @@
     * [d · cgroups, what it uses](#d--cgroups-what-it-uses)
 * [03 · The situation that created Docker](#03--the-situation-that-created-docker)
 * [04 · The image · Docker's actual invention](#04--the-image--dockers-actual-invention)
-    * [a · Image vs container](#a--image-vs-container)
+    * [a · Docker images vs. containers](#a--docker-images-vs-containers)
 
 ---
 
