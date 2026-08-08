@@ -226,7 +226,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, pid, net, time, cgroup
 
 # 04 · The image · Docker's actual invention
 
-**Namespaces and cgroups gave isolation.** Union filesystems (AUFS, later OverlayFS) already gave **layering**. Neither belongs to Docker.
+**Namespaces gave isolation, cgroups gave limits.** Union filesystems (AUFS, later OverlayFS) already gave **layering**. None of it belongs to Docker.
 
 **What nobody had built was a way to name, version, and ship an environment.** That's the image:
 
