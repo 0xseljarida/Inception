@@ -29,7 +29,7 @@
 ---
 
 <a id="01--why-containers-were-invented"></a>
-<details open>
+<details>
 <summary><h1>01 · Why containers were invented</h1></summary>
 
 
@@ -75,7 +75,7 @@ Three options existed:
 </details>
 
 <a id="02--what-is-a-container"></a>
-<details open>
+<details>
 <summary><h1>02 · What is a container?</h1></summary>
 
 
@@ -237,7 +237,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 </details>
 
 <a id="03--docker"></a>
-<details open>
+<details>
 <summary><h1>03 · Docker</h1></summary>
 
 
@@ -279,7 +279,7 @@ LXC could already run a container, but you still had to assemble its filesystem 
 </details>
 
 <a id="04--docker-image"></a>
-<details open>
+<details>
 <summary><h1>04 · Docker image</h1></summary>
 
 
@@ -357,7 +357,7 @@ the process sees:  one merged /
 </details>
 
 <a id="05--docker-architecture"></a>
-<details open>
+<details>
 <summary><h1>05 · Docker architecture (client ↔ daemon)</h1></summary>
 
 
@@ -606,7 +606,7 @@ And underneath all of them:
 </details>
 
 <a id="06--dockerfile"></a>
-<details open>
+<details>
 <summary><h1>06 · Dockerfile</h1></summary>
 
 
