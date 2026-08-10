@@ -225,6 +225,10 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 LXC could already run a container, but you still had to assemble its filesystem by hand, choose the namespaces, wire the network, then repeat all of it on every machine. There was no way to hand someone a finished environment.
 
+**Solomon Hykes hit that wall at dotCloud**, a platform-as-a-service company that already ran customer applications in containers. Docker began as their internal tooling, and he open-sourced it in March 2013 at PyCon. dotCloud renamed itself Docker Inc. the same year.
+
+**It ran on LXC at first.** Docker only started driving the kernel itself in version 0.9 in 2014, when it replaced LXC with its own `libcontainer`, written in Go. That component is what became `runc`.
+
 > **Isolation was solved. Distribution wasn't.**
 
 **Docker's answer was the image:** build the environment once, ship it as one artifact.
