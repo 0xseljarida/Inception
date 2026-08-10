@@ -225,13 +225,11 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 LXC could already run a container, but you still had to assemble its filesystem by hand, choose the namespaces, wire the network, then repeat all of it on every machine. There was no way to hand someone a finished environment.
 
-**Solomon Hykes hit that wall at dotCloud**, a platform-as-a-service company that already ran customer applications in containers. Docker began as their internal tooling, and he open-sourced it in March 2013 at PyCon. dotCloud renamed itself Docker Inc. the same year.
-
-**It ran on LXC at first.** Docker only started driving the kernel itself in version 0.9 in 2014, when it replaced LXC with its own `libcontainer`, written in Go. That component is what became `runc`.
-
 > **Isolation was solved. Distribution wasn't.**
 
-**Docker's answer was the image:** build the environment once, ship it as one artifact.
+**Solomon Hykes hit that wall at dotCloud**, a platform-as-a-service company already running customer applications in containers. Docker began as their internal tooling, and he open-sourced it in March 2013 at PyCon. dotCloud renamed itself Docker Inc. the same year.
+
+**His answer was the image:** build the environment once, ship it as one artifact. Around it came three more pieces:
 
 | | |
 |:--|:--|
@@ -240,7 +238,21 @@ LXC could already run a container, but you still had to assemble its filesystem 
 | **A daemon** | a background service managing images, containers, networks, and the API |
 | **A CLI** | `docker run` instead of a page of manual setup |
 
+**Docker still wasn't touching the kernel yet.** It drove LXC until version 0.9 in 2014, when `libcontainer`, written in Go, replaced it. That component is what became `runc`.
+
 > **In short:** containers are an operating-system feature. On Linux that's namespaces + cgroups, and Docker is a very good tool for using them.
+
+<br>
+
+**If a corrector asks "what is Docker?":**
+
+> **Docker is a platform for building, shipping and running containers.**
+>
+> It provides no isolation of its own. It drives features that already exist in the Linux kernel: **namespaces** for isolation, **cgroups** for limits, and a **union filesystem** (OverlayFS) for layered images.
+>
+> It is **client and server**. The `docker` CLI is just an HTTP client; it sends every command to a daemon, `dockerd`, which builds images from Dockerfiles, pulls and pushes them to registries, and delegates the actual container creation down to `containerd` and `runc`.
+>
+> A container is **not a virtual machine**. No OS boots, no hardware is emulated. Every container is an ordinary process sharing the host's kernel, which is why it starts instantly and costs almost nothing in memory.
 
 ---
 
