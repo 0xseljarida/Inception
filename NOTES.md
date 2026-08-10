@@ -27,6 +27,7 @@
     * [b · FROM](#b--from)
     * [c · RUN](#c--run)
     * [d · COPY and the build context](#d--copy-and-the-build-context)
+    * [e · CMD, ENTRYPOINT and PID 1](#e--cmd-entrypoint-and-pid-1)
 
 ---
 
@@ -784,6 +785,36 @@ Without it you ship your whole `.git` history to the daemon on every build, whic
 **`COPY` vs `ADD`:** both copy files in, but `ADD` also unpacks local tar archives and can fetch URLs. That extra magic is surprising and hard to audit.
 
 > **Use `COPY` unless you specifically need `ADD`.** This is Docker's own recommendation.
+
+</details>
+
+<a id="e--cmd-entrypoint-and-pid-1"></a>
+<details>
+<summary><h2>e · CMD, ENTRYPOINT and PID 1</h2></summary>
+
+
+**They both say what to run.** `ENTRYPOINT` is the fixed command, `CMD` is the default argument. Used alone, either works.
+
+**Write them in exec form, always:**
+
+```dockerfile
+CMD ["nginx", "-g", "daemon off;"]     # exec form: nginx is PID 1
+CMD nginx -g "daemon off;"             # shell form: /bin/sh is PID 1
+```
+
+**Shell form silently wraps your command in `/bin/sh -c`.** The shell becomes PID 1 and your daemon becomes its child.
+
+**Why that breaks things:** PID 1 is the reaper. It receives the signals and adopts orphans. `sh` does not forward `SIGTERM`, so `docker stop` is ignored, waits 10 seconds, then kills the container. Zombies pile up too.
+
+**The daemon must stay in the foreground.** A service that daemonises exits immediately, and the container dies with it:
+
+```
+nginx     -g "daemon off;"
+php-fpm   -F
+mysqld    (already foreground)
+```
+
+> ⚠️ **The subject bans `tail -f`, `sleep infinity`, `while true` and bare `bash` as PID 1.** Each one is a fake process holding the container open while the real service runs behind it, or not at all. Instant fail at defense.
 
 </details>
 
