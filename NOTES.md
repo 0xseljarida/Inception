@@ -208,7 +208,9 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 **A container is a process given both:** a fabricated view, and a budget.
 
-**None of it was built for Docker.** Mount namespaces came from Plan 9, cgroups from Google's datacenters, union filesystems from live CDs. In 2013 Solomon Hykes and his team at dotCloud combined these existing pieces into one tool and called it Docker.
+**LXC put the two together first.** In 2008, five years before Docker, LXC combined namespaces and cgroups straight from the mainline kernel and called the result a container. The pieces themselves were never built for this: mount namespaces came from Plan 9, cgroups from Google's datacenters, union filesystems from live CDs.
+
+**So containers already existed and already worked.** Docker arrived in 2013 to solve a different problem.
 
 ---
 
@@ -216,7 +218,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 > **Docker is a tool that builds, ships and runs containers.**
 
-Containers already worked, but building one meant assembling a filesystem by hand, choosing namespaces, wiring the network, then repeating all of it on every machine.
+LXC could already run a container, but you still had to assemble its filesystem by hand, choose the namespaces, wire the network, then repeat all of it on every machine. There was no way to hand someone a finished environment.
 
 > **Isolation was solved. Distribution wasn't.**
 
