@@ -281,15 +281,24 @@ LXC could already run a container, but you still had to assemble its filesystem 
 
 ## b · Docker images vs. containers
 
-**A Docker image is a blueprint** that is executed in a Docker container. You add layers of core functionality to an image, and that image is then used to create a running container.
+> **An image is the package. A container is that package running.**
 
-**In other words, a container is a running instance of an image.** You can create many containers from the same image, each with its own unique data and state.
+Docker defines a container as an **isolated process**: *"Containers are isolated processes for each of your app's components."* Self-contained, because it carries everything it needs, and isolated, because it barely touches the host or its neighbours.
+
+| Image | Container |
+|:--|:--|
+| a package sitting on disk | a running process |
+| does nothing on its own | has a lifecycle: start, stop, die |
+| read-only | the image layers **plus its own writable directory** |
+| built once | created and destroyed freely |
+
+**Many containers, one image.** Each one gets its own writable directory, so each has its own data and state. Nothing a container writes ever reaches the image it came from.
 
 ---
 
 ## c · Image layers
 
-**An image is not one flat blob. It's a stack of layers, and a layer is a set of file changes.**
+**An image is a stack of layers, and each layer is a set of filesystem changes:** additions, deletions, or modifications.
 
 Each build instruction produces one:
 
@@ -299,20 +308,21 @@ RUN apt install nginx    → layer 2: only the files apt added
 COPY nginx.conf /etc/    → layer 3: one file
 ```
 
-Stacked, they look like this:
+**On disk, every layer is extracted into its own directory.** They only become a filesystem when a container starts: a **union filesystem** stacks them into one unified view, and adds one more directory that belongs to the container itself.
 
 ```
+writable layer   ← created at run time, for this container only
 layer 3   nginx.conf
 layer 2   /usr/sbin/nginx, /etc/nginx/...
 layer 1   /bin, /etc, /usr, /var ...
 ──────────────────────────────────────
-the container sees:  all of it, merged into one /
+the process sees:  one merged /
 ```
 
-**A union filesystem does the merging** (OverlayFS on this machine). The process opening `/etc/nginx.conf` has no idea it came from layer 3. It just sees a normal filesystem.
+**The process has no idea.** Opening `/etc/nginx.conf` looks like opening a file on a normal filesystem, not like reaching into layer 3.
 
 **Why layers matter:**
 
-- **Shared.** Ten images built `FROM debian:bookworm` store that base layer **once**.
-- **Cached.** On rebuild, unchanged layers are reused, which is why the order of your instructions changes build time.
-- **Read-only.** Every layer is frozen. A running container adds one writable layer on top, and that one dies with the container.
+- **Reuse.** You extend someone else's image by reusing their base layers and adding only your own data. Ten images built `FROM debian:bookworm` store that base **once**.
+- **Cache.** On rebuild, unchanged layers are reused, which is why the order of your instructions changes build time.
+- **Immutable.** Image layers are never touched. Every change a container makes lands in its own writable directory, and that directory dies with the container.
