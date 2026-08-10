@@ -25,7 +25,10 @@
 
 ---
 
-# 01 · Why containers were invented
+<a id="01--why-containers-were-invented"></a>
+<details open>
+<summary><h1>01 · Why containers were invented</h1></summary>
+
 
 **One server. 200 customers. Each one wants their own isolated website.**
 
@@ -66,7 +69,12 @@ Three options existed:
 
 ---
 
-# 02 · What is a container?
+</details>
+
+<a id="02--what-is-a-container"></a>
+<details open>
+<summary><h1>02 · What is a container?</h1></summary>
+
 
 > **A container is just a normal Linux process on your kernel, with lies told to it. yep we just lie to the process !**
 
@@ -223,7 +231,12 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 ---
 
-# 03 · Docker
+</details>
+
+<a id="03--docker"></a>
+<details open>
+<summary><h1>03 · Docker</h1></summary>
+
 
 > **Docker is a tool that builds, ships and runs containers.**
 
@@ -260,7 +273,12 @@ LXC could already run a container, but you still had to assemble its filesystem 
 
 ---
 
-# 04 · Docker image
+</details>
+
+<a id="04--docker-image"></a>
+<details open>
+<summary><h1>04 · Docker image</h1></summary>
+
 
 ## a · Definition
 
@@ -333,7 +351,12 @@ the process sees:  one merged /
 
 ---
 
-# 05 · Docker architecture
+</details>
+
+<a id="05--docker-architecture"></a>
+<details open>
+<summary><h1>05 · Docker architecture</h1></summary>
+
 
 > **Docker is client and server.** The `docker` command does almost nothing by itself.
 
@@ -573,3 +596,8 @@ And underneath all of them:
                       ▲
                  docker CLI
 ```
+
+</details>
+
+
+</details>
