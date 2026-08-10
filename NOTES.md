@@ -22,6 +22,9 @@
     * [a · The CLI is just an HTTP client](#a--the-cli-is-just-an-http-client)
     * [b · dockerd, containerd, shim, runc](#b--dockerd-containerd-shim-runc)
     * [c · DEEPDIVE](#c--deepdive)
+* [06 · Dockerfile](#06--dockerfile)
+    * [a · Instructions and layers](#a--instructions-and-layers)
+    * [b · FROM](#b--from)
 
 ---
 
@@ -599,5 +602,56 @@ And underneath all of them:
 
 </details>
 
+
+</details>
+
+<a id="06--dockerfile"></a>
+<details open>
+<summary><h1>06 · Dockerfile</h1></summary>
+
+
+> **A Dockerfile is a recipe for building an image.** A plain-text file of instructions that the builder executes in order. Docker uses **BuildKit** by default.
+
+```dockerfile
+FROM debian:bookworm
+RUN apt-get update && apt-get install -y nginx
+COPY nginx.conf /etc/nginx/conf.d/
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+```bash
+docker build -t my-nginx .
+```
+
+---
+
+## a · Instructions and layers
+
+**Only instructions that change the filesystem create a layer:**
+
+| Creates a layer | Metadata only |
+|:--|:--|
+| `FROM` `RUN` `COPY` `ADD` | `CMD` `ENTRYPOINT` `ENV` `WORKDIR` `EXPOSE` ... |
+
+So the example above is **4 instructions but 3 layers**. This is where the layers in § 04 c come from: **the Dockerfile is what produces them.**
+
+---
+
+## b · FROM
+
+**`FROM` names the base image and comes first.** For Inception:
+
+```dockerfile
+FROM debian:bookworm
+```
+
+**Never `debian:latest`.** The subject forbids it and asks for the penultimate stable release:
+
+```
+Debian 13 · trixie     current stable
+Debian 12 · bookworm   penultimate stable   ← this one
+```
+
+**`latest` is a moving tag.** The image behind it changes over time, so a build that worked yesterday can break tomorrow. Pinning `bookworm` makes the intended release explicit and the build reproducible.
 
 </details>
