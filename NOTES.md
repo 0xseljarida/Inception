@@ -260,7 +260,18 @@ LXC could already run a container, but you still had to assemble its filesystem 
 
 ## a · Definition
 
-> **An image is your whole setup saved as one file you can copy to any machine: the OS files, your app, and everything it needs, packed together.**
+> **A container image is a standardized package that includes all of the files, binaries, libraries and configurations to run a container.**
+>
+> <sub><i>Docker's own definition</i></sub>
+
+**In plainer words:** your whole setup saved as one package you can copy to any machine. The OS files, your app, its dependencies and its config, together.
+
+**What it does not contain is a kernel.** That is the entire difference from a VM image. A VM image carries an operating system that has to boot; a container image carries only userspace and borrows the kernel of whatever machine it lands on.
+
+**Two rules define an image:**
+
+- **It is immutable.** Once created it can never be modified. You can only build a new one, or add changes on top of it.
+- **It is layered.** It is composed of layers, each one a set of filesystem changes that add, remove or modify files.
 
 **It's Docker's actual invention.** Isolation came from namespaces, limits from cgroups, layering from union filesystems. None of that is Docker's. The image is.
 
