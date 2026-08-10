@@ -26,6 +26,7 @@
     * [a · Instructions and layers](#a--instructions-and-layers)
     * [b · FROM](#b--from)
     * [c · RUN](#c--run)
+    * [d · COPY and the build context](#d--copy-and-the-build-context)
 
 ---
 
@@ -54,9 +55,11 @@ Three options existed:
 > A 2005 host would have answered "shared hosting", and the real waste containers
 > attacked was enterprise VM sprawl: thousands of VMs idling at 8% CPU.
 
----
 
-## a · Container vs Virtual Machine
+<a id="a--container-vs-virtual-machine"></a>
+<details>
+<summary><h2>a · Container vs Virtual Machine</h2></summary>
+
 
 **Containers exist for density and isolation**, not to replace VMs.
 
@@ -71,7 +74,8 @@ Three options existed:
 
 **The last row is the trade.** A VM's boundary is a hypervisor and hard to escape. A container's boundary is kernel bookkeeping, so a kernel bug crosses it.
 
----
+
+</details>
 
 </details>
 
@@ -93,9 +97,11 @@ Three options existed:
 | **Namespaces** | what a process can **see** | isolation |
 | **cgroups** | what a process can **use** | limits |
 
----
 
-## a · Containers are much older than Docker
+<a id="a--containers-are-much-older-than-docker"></a>
+<details>
+<summary><h2>a · Containers are much older than Docker</h2></summary>
+
 
 **None of this was invented in 2013.** The mechanism was already solved and in production:
 
@@ -110,9 +116,13 @@ Three options existed:
 
 **Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC.
 
----
 
-## b · Namespaces, what it sees
+</details>
+
+<a id="b--namespaces-what-it-sees"></a>
+<details>
+<summary><h2>b · Namespaces, what it sees</h2></summary>
+
 
 > **A namespace gives a process its own private view of one part of the system.**
 
@@ -165,9 +175,13 @@ PID 1  sleep 300    ═══  PID 50862  sleep 300
 
 **The network namespace matters most here.** Each container gets its own interface, IP, routing table, and **its own set of ports**, which is why two containers can both listen on 9000 and never collide.
 
----
 
-## c · Where namespaces actually live
+</details>
+
+<a id="c--where-namespaces-actually-live"></a>
+<details>
+<summary><h2>c · Where namespaces actually live</h2></summary>
+
 
 **A namespace is not the process control block.** In Linux the PCB is `struct task_struct`: one per process, holding PID, state, memory map, open files.
 
@@ -201,9 +215,13 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
             ──> cred    ──> user_ns
 ```
 
----
 
-## d · cgroups, what it uses
+</details>
+
+<a id="d--cgroups-what-it-uses"></a>
+<details>
+<summary><h2>d · cgroups, what it uses</h2></summary>
+
 
 **Namespaces hide things but restrain nothing.** A process that only sees its own filesystem can still eat every byte of RAM on the machine, exactly the hosting problem from section 01.
 
@@ -220,9 +238,13 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 > 💡 **Fun fact:** when Google started this work in 2006 it was called **"process containers"**. The name was changed to *control groups* in late 2007 to avoid confusion, because "container" already meant several different things around the kernel. It merged as **cgroups** in 2.6.24, January 2008.
 
----
 
-## e · Conclusion
+</details>
+
+<a id="e--conclusion"></a>
+<details>
+<summary><h2>e · Conclusion</h2></summary>
+
 
 **Namespaces answer** *"what world does this process live in?"*
 **cgroups answer** *"how much of the real machine may it consume?"*
@@ -233,7 +255,8 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 **So containers already existed and already worked.** Docker arrived in 2013 to solve a different problem.
 
----
+
+</details>
 
 </details>
 
@@ -275,7 +298,6 @@ LXC could already run a container, but you still had to assemble its filesystem 
 >
 > A container is **not a virtual machine**. No OS boots, no hardware is emulated. Every container is an ordinary process sharing the host's kernel, which is why it starts instantly and costs almost nothing in memory.
 
----
 
 </details>
 
@@ -283,8 +305,10 @@ LXC could already run a container, but you still had to assemble its filesystem 
 <details>
 <summary><h1>04 · Docker image</h1></summary>
 
+<a id="a--definition"></a>
+<details>
+<summary><h2>a · Definition</h2></summary>
 
-## a · Definition
 
 > **A container image is a standardized package that includes all of the files, binaries, libraries and configurations to run a container.**
 >
@@ -303,9 +327,13 @@ LXC could already run a container, but you still had to assemble its filesystem 
 
 **It's not Docker-owned anymore.** The format was standardized as the **OCI Image Spec**, so Podman, containerd and Kubernetes all use the same images.
 
----
 
-## b · Docker images vs. containers
+</details>
+
+<a id="b--docker-images-vs-containers"></a>
+<details>
+<summary><h2>b · Docker images vs. containers</h2></summary>
+
 
 > **An image is the package. A container is that package running.**
 
@@ -320,9 +348,13 @@ Docker defines a container as an **isolated process**: *"Containers are isolated
 
 **Many containers, one image.** Each one gets its own writable directory, so each has its own data and state. Nothing a container writes ever reaches the image it came from.
 
----
 
-## c · Image layers
+</details>
+
+<a id="c--image-layers"></a>
+<details>
+<summary><h2>c · Image layers</h2></summary>
+
 
 **An image is a stack of layers, and each layer is a set of filesystem changes:** additions, deletions, or modifications.
 
@@ -353,7 +385,8 @@ the process sees:  one merged /
 - **Cache.** On rebuild, unchanged layers are reused, which is why the order of your instructions changes build time.
 - **Immutable.** Image layers are never touched. Every change a container makes lands in its own writable directory, and that directory dies with the container.
 
----
+
+</details>
 
 </details>
 
@@ -366,9 +399,11 @@ the process sees:  one merged /
 
 **The daemon does the work.** In Docker's own words: *"The Docker client talks to the Docker daemon, which does the heavy lifting of building, running, and distributing your Docker containers."* `dockerd` listens for API requests and manages images, containers, networks and volumes.
 
----
 
-## a · The CLI is just an HTTP client
+<a id="a--the-cli-is-just-an-http-client"></a>
+<details>
+<summary><h2>a · The CLI is just an HTTP client</h2></summary>
+
 
 **They talk over a REST API**, on a UNIX socket or a network interface. Nothing more.
 
@@ -398,9 +433,13 @@ Anyone in the `docker` group can send commands to a daemon running as **root**. 
 
 **And they are separate services.** On this machine `dockerd` and `containerd` are both children of PID 1, started by systemd. Neither is the other's parent.
 
----
 
-## b · dockerd, containerd, shim, runc
+</details>
+
+<a id="b--dockerd-containerd-shim-runc"></a>
+<details>
+<summary><h2>b · dockerd, containerd, shim, runc</h2></summary>
+
 
 **`dockerd` does not start containers itself.** It hands the job down a chain:
 
@@ -429,14 +468,13 @@ sleep (24654)
 
 **And `containerd` is not Docker-only.** It is a separate CNCF project. Kubernetes talks to it directly, with no Docker involved.
 
----
 
-## c · DEEPDIVE
+</details>
 
+<a id="c--deepdive"></a>
 <details>
-<summary><b>Click to expand</b></summary>
+<summary><h2>c · DEEPDIVE</h2></summary>
 
-<br>
 
 - **`dockerd`**: the **Docker daemon** that manages Docker resources and translates Docker API requests into container operations.
 - **`containerd`**: a **container runtime manager** that manages the lifecycle, images, and execution of containers, delegating the actual Linux isolation and process creation to a runtime such as `runc`.
@@ -603,7 +641,6 @@ And underneath all of them:
 
 </details>
 
-
 </details>
 
 <a id="06--dockerfile"></a>
@@ -624,9 +661,11 @@ CMD ["nginx", "-g", "daemon off;"]
 docker build -t my-nginx .
 ```
 
----
 
-## a · Instructions and layers
+<a id="a--instructions-and-layers"></a>
+<details>
+<summary><h2>a · Instructions and layers</h2></summary>
+
 
 **Only instructions that change the filesystem create a layer:**
 
@@ -636,9 +675,13 @@ docker build -t my-nginx .
 
 So the example above is **4 instructions but 3 layers**. This is where the layers in § 04 c come from: **the Dockerfile is what produces them.**
 
----
 
-## b · FROM
+</details>
+
+<a id="b--from"></a>
+<details>
+<summary><h2>b · FROM</h2></summary>
+
 
 **`FROM` names the base image and comes first.** For Inception:
 
@@ -655,9 +698,13 @@ Debian 12 · bookworm   penultimate stable   ← this one
 
 **`latest` is a moving tag.** The image behind it changes over time, so a build that worked yesterday can break tomorrow. Pinning `bookworm` makes the intended release explicit and the build reproducible.
 
----
 
-## c · RUN
+</details>
+
+<a id="c--run"></a>
+<details>
+<summary><h2>c · RUN</h2></summary>
+
 
 **`RUN` executes a command in a temporary container and freezes the result as a layer.** It is where your image size is decided.
 
@@ -698,5 +745,46 @@ RUN apt-get update \
 Now those files never exist in a committed layer at all.
 
 **`--no-install-recommends`** skips the packages Debian merely suggests. On a minimal image that is often tens of megabytes.
+
+
+</details>
+
+<a id="d--copy-and-the-build-context"></a>
+<details>
+<summary><h2>d · COPY and the build context</h2></summary>
+
+
+**The `.` at the end of the build command is not decoration.** It is the **build context**: the directory that gets packed up and sent to the daemon.
+
+```bash
+docker build -t my-nginx .
+```
+
+**Remember § 05: the CLI builds nothing.** It tars that directory, sends it over the socket, and BuildKit builds on the other side. That is why the output starts with a transfer, and it explains the rules below.
+
+**`COPY` can only read from inside the context.**
+
+```dockerfile
+COPY nginx.conf /etc/nginx/conf.d/    # fine, it was sent
+COPY ../secrets/db_password /run/     # impossible, never sent
+```
+
+**There is no way around it.** The daemon may sit on another machine entirely; it simply does not have your parent directory. Any path outside the context does not exist as far as the build is concerned.
+
+**`.dockerignore` keeps junk out of the transfer.** Same syntax as `.gitignore`:
+
+```
+.git
+*.md
+secrets/
+```
+
+Without it you ship your whole `.git` history to the daemon on every build, which is slower and risks baking things into the image that should never be there.
+
+**`COPY` vs `ADD`:** both copy files in, but `ADD` also unpacks local tar archives and can fetch URLs. That extra magic is surprising and hard to audit.
+
+> **Use `COPY` unless you specifically need `ADD`.** This is Docker's own recommendation.
+
+</details>
 
 </details>
