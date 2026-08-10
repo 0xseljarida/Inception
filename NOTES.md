@@ -18,6 +18,8 @@
     * [a · Definition](#a--definition)
     * [b · Docker images vs. containers](#b--docker-images-vs-containers)
     * [c · Image layers](#c--image-layers)
+* [05 · Docker architecture](#05--docker-architecture)
+    * [a · The CLI is just an HTTP client](#a--the-cli-is-just-an-http-client)
 
 ---
 
@@ -326,3 +328,43 @@ the process sees:  one merged /
 - **Reuse.** You extend someone else's image by reusing their base layers and adding only your own data. Ten images built `FROM debian:bookworm` store that base **once**.
 - **Cache.** On rebuild, unchanged layers are reused, which is why the order of your instructions changes build time.
 - **Immutable.** Image layers are never touched. Every change a container makes lands in its own writable directory, and that directory dies with the container.
+
+---
+
+# 05 · Docker architecture
+
+> **Docker is client and server.** The `docker` command does almost nothing by itself.
+
+**The daemon does the work.** In Docker's own words: *"The Docker client talks to the Docker daemon, which does the heavy lifting of building, running, and distributing your Docker containers."* `dockerd` listens for API requests and manages images, containers, networks and volumes.
+
+---
+
+## a · The CLI is just an HTTP client
+
+**They talk over a REST API**, on a UNIX socket or a network interface. Nothing more.
+
+```
+docker CLI  ──HTTP──>  /var/run/docker.sock  ──>  dockerd
+```
+
+**Proof, without using `docker` at all:**
+
+```bash
+curl -s --unix-socket /var/run/docker.sock http://localhost/version
+```
+
+```json
+{"Version":"29.7.2","ApiVersion":"1.55","Os":"linux","Arch":"amd64", ...}
+```
+
+That's the same answer `docker version` prints, because that is all `docker version` does.
+
+**One consequence worth knowing:**
+
+```
+srw-rw---- 1 root docker  /var/run/docker.sock
+```
+
+Anyone in the `docker` group can send commands to a daemon running as **root**. Being in the docker group is effectively being root on the machine.
+
+**And they are separate services.** On this machine `dockerd` and `containerd` are both children of PID 1, started by systemd. Neither is the other's parent.
