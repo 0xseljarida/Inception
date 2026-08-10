@@ -18,7 +18,7 @@
     * [a · Definition](#a--definition)
     * [b · Docker images vs. containers](#b--docker-images-vs-containers)
     * [c · Image layers](#c--image-layers)
-* [05 · Docker architecture](#05--docker-architecture)
+* [05 · Docker architecture (client ↔ daemon)](#05--docker-architecture)
     * [a · The CLI is just an HTTP client](#a--the-cli-is-just-an-http-client)
     * [b · dockerd, containerd, shim, runc](#b--dockerd-containerd-shim-runc)
     * [c · DEEPDIVE](#c--deepdive)
@@ -355,7 +355,7 @@ the process sees:  one merged /
 
 <a id="05--docker-architecture"></a>
 <details open>
-<summary><h1>05 · Docker architecture</h1></summary>
+<summary><h1>05 · Docker architecture (client ↔ daemon)</h1></summary>
 
 
 > **Docker is client and server.** The `docker` command does almost nothing by itself.
