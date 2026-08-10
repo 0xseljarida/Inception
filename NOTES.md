@@ -12,6 +12,7 @@
     * [b · Namespaces, what it sees](#b--namespaces-what-it-sees)
     * [c · Where namespaces actually live](#c--where-namespaces-actually-live)
     * [d · cgroups, what it uses](#d--cgroups-what-it-uses)
+    * [e · Conclusion](#e--conclusion)
 * [03 · Docker](#03--docker)
 * [04 · Docker image](#04--docker-image)
     * [a · Definition](#a--definition)
@@ -201,7 +202,11 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 > ⚠️ A container capped at 64 MB still reports the host's full 15 GB when asked how much memory the machine has. It has no idea it's restricted. The limit is real anyway.
 
-<br>
+> 💡 **Fun fact:** cgroups were originally called **"process containers"**. Google renamed them to *control groups* in 2007 because "container" was already taken, by Solaris and OpenVZ.
+
+---
+
+## e · Conclusion
 
 **Namespaces answer** *"what world does this process live in?"*
 **cgroups answer** *"how much of the real machine may it consume?"*
