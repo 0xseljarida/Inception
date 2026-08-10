@@ -208,6 +208,8 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 **A container is a process given both:** a fabricated view, and a budget.
 
+**None of it was built for Docker.** Mount namespaces came from Plan 9, cgroups from Google's datacenters, union filesystems from live CDs. In 2013 Solomon Hykes and his team at dotCloud combined these existing pieces into one tool and called it Docker.
+
 ---
 
 # 03 · Docker
