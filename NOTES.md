@@ -36,7 +36,7 @@ Three options existed:
 
 > **Can one machine host many isolated tenants without pretending to be 200 machines?**
 
-**Containers are the answer.** Keep one operating system, and make it **lie to each process about what machine it's on**.
+**Containers are the answer.** Keep one operating system, and make it **lie to each process about what machine it's on**. Yes a container is just a process. 
 
 > **Note:** the "200 customers" framing above is a teaching device, not history.
 > A 2005 host would have answered "shared hosting", and the real waste containers
