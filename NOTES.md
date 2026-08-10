@@ -21,6 +21,7 @@
 * [05 · Docker architecture](#05--docker-architecture)
     * [a · The CLI is just an HTTP client](#a--the-cli-is-just-an-http-client)
     * [b · dockerd, containerd, shim, runc](#b--dockerd-containerd-shim-runc)
+    * [c · DEEPDIVE](#c--deepdive)
 
 ---
 
@@ -400,3 +401,167 @@ sleep (24654)
 **That is why `systemctl restart docker` doesn't kill your containers.** They were never the daemon's children. The daemon can die and come back, and the container never notices.
 
 **And `containerd` is not Docker-only.** It is a separate CNCF project. Kubernetes talks to it directly, with no Docker involved.
+
+---
+
+## c · DEEPDIVE
+
+**Stop thinking of `dockerd` and `containerd` as two things that both "run containers".** They have different responsibilities.
+
+```
+docker CLI
+    │
+    │ HTTP API
+    ▼
+ dockerd
+    │
+    │ gRPC
+    ▼
+containerd
+    │
+    │ manages container runtime
+    ▼
+containerd-shim-runc-v2
+    │
+    ▼
+   runc
+    │
+    │ creates Linux isolation
+    ▼
+your process
+```
+
+<br>
+
+### 1. What `dockerd` actually does
+
+Type this:
+
+```bash
+docker run -d --name web -p 8080:80 nginx
+```
+
+**The CLI does not create a process.** It sends a request to `dockerd`, conceptually:
+
+```
+POST /containers/create
+{
+    image: "nginx",
+    name:  "web",
+    ports: ...
+}
+```
+
+**Then `dockerd` makes all the Docker-specific decisions:**
+
+- what does `nginx` mean, and does that image exist locally?
+- if not, pull it from a registry
+- which network, which IP, which port mapping?
+- which volumes and bind mounts?
+- which environment variables, which restart policy?
+
+**`dockerd` constructs the desired container configuration.** That is its whole job.
+
+<br>
+
+### 2. What `containerd` does
+
+Once `dockerd` has decided *"I want a container with these properties"*, it asks `containerd` to manage the actual lifecycle.
+
+**`containerd` knows nothing about the Docker CLI.** Its concern is narrower:
+
+> *"I have an OCI image and an OCI runtime specification. I need to create and manage a container from them."*
+
+It handles:
+
+- image and layer management
+- filesystem snapshots
+- container lifecycle: start, stop, delete
+- talking to the runtime, and managing the container's shim
+
+<br>
+
+### 3. Where the actual process comes from
+
+**`containerd` does not perform the namespace setup either.** It goes through the shim to `runc`:
+
+```
+containerd
+    ↓
+containerd-shim-runc-v2
+    ↓
+runc
+```
+
+**`runc` is what performs the low-level creation**, using:
+
+```
+namespaces
+cgroups
+mounts
+capabilities
+seccomp
+pivot_root
+execve()
+```
+
+The result is an ordinary Linux process, placed inside the right namespaces and cgroups:
+
+```
+PID 12345  nginx
+```
+
+<br>
+
+### 4. The separation, in one line each
+
+**dockerd** = Docker's brain
+**containerd** = container lifecycle manager
+**runc** = low-level container creator
+**Linux kernel** = what actually provides the isolation
+
+<br>
+
+### 5. Why not just dockerd → runc?
+
+**Historically, it was.** Most of the container machinery lived inside Docker itself, and was split out later. The split is what makes `containerd` useful **without** Docker:
+
+```
+Docker ecosystem          Kubernetes
+      │                        │
+   dockerd                    CRI
+      │                        │
+  containerd               containerd
+      │                        │
+    runc                     runc
+```
+
+No `dockerd` required on the right-hand side.
+
+<br>
+
+### The distinction to keep in your head
+
+`docker run nginx` asks **three different questions**:
+
+| Question | Answered by |
+|:--|:--|
+| What should this container look like? | `dockerd` |
+| How do I manage its lifecycle and filesystem? | `containerd` |
+| How do I turn that into a Linux process with namespaces and cgroups? | `runc` |
+
+And underneath all of them:
+
+```
+                 Linux kernel
+                      ▲
+                    runc
+                      ▲
+          containerd-shim-runc-v2
+                      ▲
+                 containerd
+                      ▲
+                   dockerd
+                      ▲
+                 docker CLI
+```
