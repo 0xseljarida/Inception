@@ -20,6 +20,7 @@
     * [c · Image layers](#c--image-layers)
 * [05 · Docker architecture](#05--docker-architecture)
     * [a · The CLI is just an HTTP client](#a--the-cli-is-just-an-http-client)
+    * [b · dockerd, containerd, shim, runc](#b--dockerd-containerd-shim-runc)
 
 ---
 
@@ -368,3 +369,34 @@ srw-rw---- 1 root docker  /var/run/docker.sock
 Anyone in the `docker` group can send commands to a daemon running as **root**. Being in the docker group is effectively being root on the machine.
 
 **And they are separate services.** On this machine `dockerd` and `containerd` are both children of PID 1, started by systemd. Neither is the other's parent.
+
+---
+
+## b · dockerd, containerd, shim, runc
+
+**`dockerd` does not start containers itself.** It hands the job down a chain:
+
+```
+docker CLI  ──>  dockerd  ──>  containerd  ──>  containerd-shim  ──>  runc  ──>  kernel
+```
+
+| | Does |
+|:--|:--|
+| **dockerd** | the Docker API, images, builds, networks, volumes, the CLI-facing features |
+| **containerd** | container lifecycle: pull, unpack, start, stop, supervise |
+| **containerd-shim** | one per container. Stays alive, holds its stdio, reports its exit code |
+| **runc** | actually creates the container: `clone()` with the namespace flags, writes the cgroup files, `exec`s your process, then **exits immediately** |
+
+**Only `runc` touches the kernel**, and it is gone a millisecond later. That is why you never see it in `ps`.
+
+**A running container is a child of the shim, not of the daemon:**
+
+```
+sleep (24654)
+  └─ containerd-shim (24630)
+       └─ systemd (1)
+```
+
+**That is why `systemctl restart docker` doesn't kill your containers.** They were never the daemon's children. The daemon can die and come back, and the container never notices.
+
+**And `containerd` is not Docker-only.** It is a separate CNCF project. Kubernetes talks to it directly, with no Docker involved.
