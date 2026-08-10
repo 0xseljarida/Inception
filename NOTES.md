@@ -25,6 +25,7 @@
 * [06 · Dockerfile](#06--dockerfile)
     * [a · Instructions and layers](#a--instructions-and-layers)
     * [b · FROM](#b--from)
+    * [c · RUN](#c--run)
 
 ---
 
@@ -653,5 +654,49 @@ Debian 12 · bookworm   penultimate stable   ← this one
 ```
 
 **`latest` is a moving tag.** The image behind it changes over time, so a build that worked yesterday can break tomorrow. Pinning `bookworm` makes the intended release explicit and the build reproducible.
+
+---
+
+## c · RUN
+
+**`RUN` executes a command in a temporary container and freezes the result as a layer.** It is where your image size is decided.
+
+**Rule 1: `update` and `install` go in the same `RUN`.**
+
+```dockerfile
+# wrong
+RUN apt-get update
+RUN apt-get install -y nginx
+```
+
+The first line gets cached. Weeks later you add a package, the `update` layer is reused from cache with **stale package lists**, and the install asks for versions that no longer exist. The build breaks for no visible reason.
+
+```dockerfile
+# right
+RUN apt-get update && apt-get install -y nginx
+```
+
+One layer, so the cache invalidates as a unit.
+
+**Rule 2: clean up inside the same `RUN`, or it does nothing.**
+
+```dockerfile
+# useless
+RUN apt-get update && apt-get install -y nginx
+RUN rm -rf /var/lib/apt/lists/*
+```
+
+**Layers are immutable.** Deleting a file in layer 3 cannot remove it from layer 2. It only writes a **whiteout marker** that hides it. The bytes are still in the image and still shipped.
+
+```dockerfile
+# right
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nginx \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+Now those files never exist in a committed layer at all.
+
+**`--no-install-recommends`** skips the packages Debian merely suggests. On a minimal image that is often tens of megabytes.
 
 </details>
