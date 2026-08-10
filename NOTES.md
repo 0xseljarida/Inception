@@ -406,7 +406,15 @@ sleep (24654)
 
 ## c · DEEPDIVE
 
-**Stop thinking of `dockerd` and `containerd` as two things that both "run containers".** They have different responsibilities.
+<details>
+<summary><b>Click to expand</b></summary>
+
+<br>
+
+- **`dockerd`**: the **Docker daemon** that manages Docker resources and translates Docker API requests into container operations.
+- **`containerd`**: a **container runtime manager** that manages the lifecycle, images, and execution of containers, delegating the actual Linux isolation and process creation to a runtime such as `runc`.
+
+**Stop thinking of them as two things that both "run containers".** They have different responsibilities.
 
 ```
 docker CLI
