@@ -202,7 +202,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 > ⚠️ A container capped at 64 MB still reports the host's full 15 GB when asked how much memory the machine has. It has no idea it's restricted. The limit is real anyway.
 
-> 💡 **Fun fact:** cgroups were originally called **"process containers"**. Google renamed them to *control groups* in 2007 because "container" was already taken, by Solaris and OpenVZ.
+> 💡 **Fun fact:** when Google started this work in 2006 it was called **"process containers"**. The name was changed to *control groups* in late 2007 to avoid confusion, because "container" already meant several different things around the kernel. It merged as **cgroups** in 2.6.24, January 2008.
 
 ---
 
