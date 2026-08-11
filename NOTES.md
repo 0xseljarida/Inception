@@ -50,7 +50,7 @@ Three options existed:
 
 > **Can one machine host many isolated tenants without pretending to be 200 machines?**
 
-**Containers are the answer.** Keep one operating system, and make it **lie to each process about what machine it's on**. Yes a container is just a process. 
+**Containers are the answer.** Keep one operating system, and make the kernel **restrict what each process can see of the machine**. A container is just a process. 
 
 > **Note:** the "200 customers" framing above is a teaching device, not history.
 > A 2005 host would have answered "shared hosting", and the real waste containers
@@ -85,13 +85,13 @@ Three options existed:
 <summary><h1>02 · What is a container?</h1></summary>
 
 
-> **A container is just a normal Linux process on your kernel, with lies told to it. yep we just lie to the process !**
+> **A container is a Linux process running in an isolated environment, where the kernel restricts and controls what the process can see and access.**
 
 **No virtual machine boots. No OS is emulated.** Run `ps` on the host and you find an ordinary process among your others: same kernel, same scheduler.
 
-**So what makes it a container?** Only **what that process is allowed to perceive and consume**. The kernel hands it a distorted view of the machine, and the process believes it.
+**So what makes it a container?** Only **what that process is allowed to perceive and consume**. The kernel gives it a restricted view of the machine, and every system call it makes is answered from that view.
 
-**Two kernel features do the lying:**
+**Two kernel features enforce this:**
 
 | | Controls | Purpose |
 |:--|:--|:--|
@@ -127,11 +127,11 @@ Three options existed:
 
 > **A namespace gives a process its own private view of one part of the system.**
 
-Instead of one global process list, one global network, one global hostname, the kernel keeps a second copy and hands it to the process. **The process never knows it got a copy.** It just looks around and reports what it finds.
+Instead of one global process list, one global network, one global hostname, the kernel keeps a second copy and hands it to the process. **The process has no way to detect the copy.** It queries the kernel and gets the private view back.
 
 **Why use them?**
 
-- **Isolation.** Each process gets its own world and can't see anyone else's.
+- **Isolation.** Each process gets its own view of the system and cannot access anyone else's.
 - **Security.** You can run something you don't trust. If a malicious process tries to destroy the filesystem, it destroys *its own view* of it. The host and every other process are untouched.
 - **Containers.** Docker and LXC are built out of them.
 - **Sharing, on purpose.** Namespaces can be handed out deliberately: two containers can share a network namespace, or a mount point, while staying separate everywhere else.
@@ -160,7 +160,7 @@ Instead of one global process list, one global network, one global hostname, the
 &nbsp;&nbsp;&nbsp;&nbsp;It can't see where it sits in the host's hierarchy.
 
 ⏰ **`time`** → its own boot and monotonic clock. *(Linux 5.6+)*
-&nbsp;&nbsp;&nbsp;&nbsp;A container can believe it booted at a different moment.
+&nbsp;&nbsp;&nbsp;&nbsp;A container reports a different boot time than the host.
 
 <br>
 
@@ -172,7 +172,7 @@ inside container         on host
 PID 1  sleep 300    ═══  PID 50862  sleep 300
 ```
 
-**Same process, two identities.** Inside it's process number 1, the first thing that ever ran. Outside it's 50862, with a parent and hundreds of siblings it cannot see.
+**Same process, two identities.** Inside it's process number 1, the first process in its pid namespace. Outside it's 50862, with a parent and hundreds of siblings it cannot see.
 
 **The network namespace matters most here.** Each container gets its own interface, IP, routing table, and **its own set of ports**, which is why two containers can both listen on 9000 and never collide.
 
@@ -235,7 +235,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 **Docker doesn't enforce this.** It writes a number to a file, and the **kernel** does the policing, including killing the process if it overruns.
 
-> ⚠️ A container capped at 64 MB still reports the host's full 15 GB when asked how much memory the machine has. It has no idea it's restricted. The limit is real anyway.
+> ⚠️ A container capped at 64 MB still reports the host's full 15 GB when asked how much memory the machine has. The reported value comes from the host, the enforced limit is the cgroup's.
 
 > 💡 **Fun fact:** when Google started this work in 2006 it was called **"process containers"**. The name was changed to *control groups* in late 2007 to avoid confusion, because "container" already meant several different things around the kernel. It merged as **cgroups** in 2.6.24, January 2008.
 
@@ -250,7 +250,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 **Namespaces answer** *"what world does this process live in?"*
 **cgroups answer** *"how much of the real machine may it consume?"*
 
-**A container is a process given both:** a fabricated view, and a budget.
+**A container is a process given both:** a restricted view, and a resource limit.
 
 **LXC put the two together first.** In 2008, five years before Docker, LXC combined namespaces and cgroups straight from the mainline kernel and called the result a container. The pieces themselves were never built for this: mount namespaces came from Plan 9, cgroups from Google's datacenters, union filesystems from live CDs.
 
@@ -378,7 +378,7 @@ layer 1   /bin, /etc, /usr, /var ...
 the process sees:  one merged /
 ```
 
-**The process has no idea.** Opening `/etc/nginx.conf` looks like opening a file on a normal filesystem, not like reaching into layer 3.
+**The merge is transparent to the process.** Opening `/etc/nginx.conf` looks like opening a file on a normal filesystem, not like reaching into layer 3.
 
 **Why layers matter:**
 
@@ -589,7 +589,7 @@ PID 12345  nginx
 
 ### 4. The separation, in one line each
 
-**dockerd** = Docker's brain
+**dockerd** = Docker's API and configuration layer *(the brain)*
 **containerd** = container lifecycle manager
 **runc** = low-level container creator
 **Linux kernel** = what actually provides the isolation
