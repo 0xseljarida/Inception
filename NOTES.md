@@ -921,11 +921,13 @@ MariaDB client                    MariaDB server
 **The last point is the one that matters for Inception.** MariaDB is not a library linked into WordPress. It is a separate long-running process, which is exactly why it gets its own container.
 
 ```
-wordpress (php-fpm)
+wordpress container
+  php-fpm + PHP's client library
     │
     │ SQL over TCP, port 3306
     ▼
- mariadb
+mariadb container
+  mariadbd, the daemon
     │
     ▼
 /var/lib/mysql   (files on disk)
