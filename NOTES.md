@@ -28,6 +28,9 @@
     * [c · RUN](#c--run)
     * [d · COPY and the build context](#d--copy-and-the-build-context)
     * [e · CMD, ENTRYPOINT and PID 1](#e--cmd-entrypoint-and-pid-1)
+    * [f · Users and privileges inside a container](#f--users-and-privileges-inside-a-container)
+* [07 · MariaDB](#07--mariadb)
+    * [a · What MariaDB is](#a--what-mariadb-is)
 
 ---
 
@@ -815,6 +818,141 @@ mysqld    (already foreground)
 ```
 
 > ⚠️ **The subject bans `tail -f`, `sleep infinity`, `while true` and bare `bash` as PID 1.** Each one is a fake process holding the container open while the real service runs behind it, or not at all. Instant fail at defense.
+
+</details>
+
+<a id="f--users-and-privileges-inside-a-container"></a>
+<details>
+<summary><h2>f · Users and privileges inside a container</h2></summary>
+
+
+> **Unless told otherwise, every process in a container runs as UID 0, root.**
+
+**Nothing special makes this happen.** There is no login, no `su`, no privilege escalation. `runc` simply `exec`s the process with UID 0 because no other UID was requested. Three places can request one: the `USER` instruction in the Dockerfile, `--user` on `docker run`, or `user:` in Compose. If none of them appear, the answer stays 0.
+
+**This is why `RUN` never needs `sudo`:**
+
+```dockerfile
+RUN apt-get update && apt-get install -y mariadb-server
+```
+
+Each `RUN` executes in a temporary container whose process is already root, so `apt-get` has every permission it needs. Writing `sudo` there fails outright, because `debian:bookworm` does not even ship the `sudo` package.
+
+<br>
+
+### Container root is not quite host root
+
+**With Docker's default configuration, UID 0 inside is the same UID 0 as the host.** User namespace remapping exists, but it is off by default, so the kernel sees one identical numeric identity on both sides.
+
+**What separates them is not identity but capabilities.** Linux splits root's power into capability bits, and Docker grants a container only a subset of them:
+
+| Granted by default | Dropped by default |
+|:--|:--|
+| `CHOWN` `SETUID` `SETGID` `KILL` `NET_BIND_SERVICE` `NET_RAW` `SYS_CHROOT` ... | `SYS_ADMIN` `SYS_MODULE` `SYS_TIME` `SYS_BOOT` ... |
+
+**So container root can chown files and bind port 443, but cannot load a kernel module, change the system clock, or mount arbitrary filesystems.** Seccomp and AppArmor profiles narrow it further. It is root over the container's own namespaces, not over the machine.
+
+> ⚠️ **The exception is the socket.** Anyone who can reach `/var/run/docker.sock` can ask the daemon for a container with every capability and the host filesystem mounted inside. That is why § 05 a calls the `docker` group equivalent to root.
+
+<br>
+
+### Dropping privileges on purpose
+
+**A daemon that starts as root does not have to stay root.** The usual pattern is to acquire whatever needs privilege, then call `setuid()` and `setgid()` to a dedicated unprivileged system account.
+
+**MariaDB refuses to skip this step:**
+
+```
+mariadbd: Please consult the Knowledge Base to find out how to run mysqld as root!
+```
+
+```bash
+mariadbd --user=mysql
+```
+
+**`--user=mysql` names a Linux system account, not a database account.** The `mariadb-server` package creates it at install time. The daemon drops to it, so every file it writes under `/var/lib/mysql` is owned by `mysql:mysql` rather than by root.
+
+**Two unrelated things share the word "user", and confusing them is the classic mistake:**
+
+```
+Linux accounts (/etc/passwd)     MariaDB accounts (mysql.global_priv)
+├── root      UID 0              ├── root@localhost
+└── mysql     owns the datadir   └── wpuser@%
+```
+
+The kernel knows nothing about the right-hand column. MariaDB knows nothing about the left-hand one.
+
+<br>
+
+### The practical consequence for volumes
+
+**UIDs are numbers, and they cross the boundary unchanged.** A file written by UID 999 inside the container appears on the host as owned by whatever host account happens to be UID 999. Since Inception's volumes resolve to real host directories under `/home/sel-jari/data/`, ownership there is decided by which account the container process dropped to, not by who ran `docker compose`.
+
+</details>
+
+</details>
+
+<a id="07--mariadb"></a>
+<details>
+<summary><h1>07 · MariaDB</h1></summary>
+
+<a id="a--what-mariadb-is"></a>
+<details>
+<summary><h2>a · What MariaDB is</h2></summary>
+
+
+> **MariaDB is an open-source relational database management system (RDBMS) that stores and manages structured data in tables and provides an SQL interface for accessing and manipulating that data.**
+
+**It does four things:**
+
+- **Stores data in tables**, rows and columns with declared types.
+- **Lets applications read and modify that data using SQL**, the query language.
+- **Manages accounts, privileges, transactions, indexes and storage.**
+- **Runs as a database server** that clients connect to, over a socket or over the network.
+
+**The last point is the one that matters for Inception.** MariaDB is not a library linked into WordPress. It is a separate long-running process, which is exactly why it gets its own container.
+
+```
+wordpress (php-fpm)
+    │
+    │ SQL over TCP, port 3306
+    ▼
+ mariadb
+    │
+    ▼
+/var/lib/mysql   (files on disk)
+```
+
+<br>
+
+<details>
+<summary><b>History: why a fork of MySQL exists</b></summary>
+
+<br>
+
+**MariaDB was created in 2009 as a fork of MySQL by its original developers**, after Oracle acquired MySQL through its purchase of Sun Microsystems.
+
+**The goal was an independent, community-driven alternative** to an Oracle-controlled MySQL, while keeping strong MySQL compatibility.
+
+**That compatibility explains the naming you meet everywhere in this project.** MariaDB kept the wire protocol on port 3306, the SQL syntax, the system table names, and the on-disk paths:
+
+```
+/var/lib/mysql          the data directory
+/run/mysqld/mysqld.sock the Unix socket
+mysql                   the system database
+mysql                   the Linux system account
+```
+
+**The binaries were renamed, and the old names survive as symlinks:**
+
+```
+/usr/bin/mariadb     the client      ← /usr/bin/mysql
+/usr/sbin/mariadbd   the daemon      ← /usr/sbin/mysqld
+```
+
+**Prefer the `mariadb` names.** The `mysql` symlinks are a deprecated compatibility layer, kept so existing scripts keep working.
+
+</details>
 
 </details>
 
