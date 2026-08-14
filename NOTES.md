@@ -329,8 +329,6 @@ LXC could already run a container, but you still had to assemble its filesystem 
 
 **It's Docker's actual invention.** Isolation came from namespaces, limits from cgroups, layering from union filesystems. None of that is Docker's. The image is.
 
-**It's not Docker-owned anymore.** The format was standardized as the **OCI Image Spec**, so Podman, containerd and Kubernetes all use the same images.
-
 
 </details>
 
@@ -935,11 +933,14 @@ wordpress (php-fpm)
 
 <br>
 
-### What each side actually does
+<details>
+<summary><b>DEEPDIVE</b></summary>
+
+<br>
 
 **The split is blunt: the client transports, the server thinks.**
 
-**A client is any program that speaks the MariaDB protocol.** It is not necessarily the `mariadb` binary:
+**A client is any program that speaks MariaDB's client/server protocol.** It is not necessarily the `mariadb` binary:
 
 ```
 mariadb          the interactive CLI
@@ -948,6 +949,8 @@ mariadb-dump     backups
 libmariadb       the C library other programs link against
 PHP's driver     what WordPress actually uses
 ```
+
+**MariaDB uses a MySQL-compatible client/server protocol**, which is one reason MySQL clients and MariaDB clients are often interchangeable.
 
 **The client never parses SQL.** It opens the connection, authenticates, wraps the query text in a packet, and reads back whatever the server returns.
 
@@ -985,6 +988,8 @@ client                                   server (mariadbd)
 | decodes result packets | reads and writes the files in `/var/lib/mysql` |
 
 **This is why WordPress never runs the `mariadb` binary.** PHP links a connector library that produces the same packets, so `mariadbd` cannot tell whether a query came from the CLI or from a web request.
+
+</details>
 
 <br>
 
