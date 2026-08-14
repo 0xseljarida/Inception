@@ -910,6 +910,16 @@ The kernel knows nothing about the right-hand column. MariaDB knows nothing abou
 - **Manages accounts, privileges, transactions, indexes and storage.**
 - **Runs as a database server** that clients connect to, over a socket or over the network.
 
+```
+MariaDB client                    MariaDB server
+(mariadb, the CLI)                (mariadbd, the daemon)
+     │                                  │
+     │────── network / socket ─────────►│
+     │                                  │
+  sends SQL                         stores data
+  receives results                  executes SQL
+```
+
 **The last point is the one that matters for Inception.** MariaDB is not a library linked into WordPress. It is a separate long-running process, which is exactly why it gets its own container.
 
 ```
@@ -943,14 +953,14 @@ mysql                   the system database
 mysql                   the Linux system account
 ```
 
-**The binaries were renamed, and the old names survive as symlinks:**
+**The binaries were renamed in MariaDB 10.5, and the old names survive as symlinks:**
 
 ```
-/usr/bin/mariadb     the client      ← /usr/bin/mysql
-/usr/sbin/mariadbd   the daemon      ← /usr/sbin/mysqld
+/usr/bin/mysql    ──symlink──►  /usr/bin/mariadb      the client
+/usr/sbin/mysqld  ──symlink──►  /usr/sbin/mariadbd    the daemon
 ```
 
-**Prefer the `mariadb` names.** The `mysql` symlinks are a deprecated compatibility layer, kept so existing scripts keep working.
+**Prefer the `mariadb` names.** The `mysql` symlinks exist only so that existing scripts keep working.
 
 </details>
 
