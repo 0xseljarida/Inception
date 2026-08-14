@@ -935,6 +935,59 @@ wordpress (php-fpm)
 
 <br>
 
+### What each side actually does
+
+**The split is blunt: the client transports, the server thinks.**
+
+**A client is any program that speaks the MariaDB protocol.** It is not necessarily the `mariadb` binary:
+
+```
+mariadb          the interactive CLI
+mariadb-admin    ping, shutdown, status
+mariadb-dump     backups
+libmariadb       the C library other programs link against
+PHP's driver     what WordPress actually uses
+```
+
+**The client never parses SQL.** It opens the connection, authenticates, wraps the query text in a packet, and reads back whatever the server returns.
+
+```
+client                                   server (mariadbd)
+  │   open TCP 3306 or unix socket ────► │
+  │   ◄──────────── handshake packet     │
+  │   authentication packet ───────────► │
+  │   ◄──────────── OK                   │
+  │                                      │
+  │   COM_QUERY "SELECT ..." ──────────► │  parse the SQL
+  │                                      │  check privileges
+  │                                      │  plan and execute
+  │                                      │  read /var/lib/mysql
+  │   ◄──────────── result set packets   │
+```
+
+**Every packet is binary framed, but the query inside it is plain text:**
+
+```
+┌────────────────┬─────────┬──────────────────────────────┐
+│ length 3 bytes │ seq 1 B │ payload                      │
+└────────────────┴─────────┴──────────────────────────────┘
+                             │
+                             ├─ 0x03  COM_QUERY
+                             └─ "SELECT * FROM wp_posts"
+```
+
+| Client | Server |
+|:--|:--|
+| opens the connection | listens on the socket |
+| authenticates | verifies the account and password |
+| wraps SQL text in a packet | parses and plans the SQL |
+| sends it | checks privileges |
+| decodes result packets | reads and writes the files in `/var/lib/mysql` |
+
+**This is why WordPress never runs the `mariadb` binary.** PHP links a connector library that produces the same packets, so `mariadbd` cannot tell whether a query came from the CLI or from a web request.
+
+<br>
+
 <details>
 <summary><b>History: why a fork of MySQL exists</b></summary>
 
