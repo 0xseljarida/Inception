@@ -31,6 +31,7 @@
     * [f · Users and privileges inside a container](#f--users-and-privileges-inside-a-container)
 * [07 · MariaDB](#07--mariadb)
     * [a · What MariaDB is](#a--what-mariadb-is)
+    * [b · MariaDB, the container](#b--mariadb-the-container)
 
 ---
 
@@ -1023,6 +1024,178 @@ mysql                   the Linux system account
 **Prefer the `mariadb` names.** The `mysql` symlinks exist only so that existing scripts keep working.
 
 </details>
+
+</details>
+
+<a id="b--mariadb-the-container"></a>
+<details>
+<summary><h2>b · MariaDB, the container</h2></summary>
+
+
+**Three files build this service**, and each answers a different question:
+
+```
+Dockerfile              how the image is built
+conf/99-inception.cnf   what settings the daemon runs with
+tools/entrypoint.sh     what happens on every container start
+```
+
+<br>
+
+### The Dockerfile
+
+```dockerfile
+FROM debian:bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends mariadb-server \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/lib/mysql/*
+
+COPY conf/99-inception.cnf /etc/mysql/mariadb.conf.d/99-inception.cnf
+COPY --chmod=755 tools/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+```
+
+**Everything lives in one `RUN`** for the reason in § 06 c: a deletion in a later layer only hides files, it does not remove their bytes from the image.
+
+**`rm -rf /var/lib/mysql/*` is the line that is easy to miss.** Debian's `mariadb-server` package runs `mariadb-install-db` in its post-install script, so the image ships with an already-initialised data directory. That silently breaks the entrypoint, as explained below.
+
+**`COPY --chmod=755`** sets the executable bit during the copy, replacing a separate `RUN chmod +x` and the extra layer it would create.
+
+<br>
+
+### The configuration file
+
+```ini
+[mysqld]
+bind-address     = 0.0.0.0
+port             = 3306
+skip-name-resolve
+```
+
+**Only settings whose default is wrong belong here.** Debian ships `bind-address = 127.0.0.1`, meaning the daemon listens only on the loopback interface of its own network namespace, so the wordpress container could never reach it.
+
+**The file is not replacing Debian's, it is overriding it.** `/etc/mysql/mariadb.conf.d/` is read in alphabetical order and, in MariaDB's own words, *"if an option is set multiple times, the later setting will override the earlier setting."*
+
+```
+50-server.cnf     bind-address = 127.0.0.1
+99-inception.cnf  bind-address = 0.0.0.0     ← read later, wins
+```
+
+**Both files are read.** Nothing is skipped. `my_print_defaults mysqld` prints the resulting list in order, showing both values, and the daemon applies the last one.
+
+<br>
+
+### The entrypoint script
+
+```bash
+#!/bin/bash
+
+set -e
+
+mkdir -p /run/mysqld
+chown mysql:mysql /run/mysqld
+
+MYSQL_PASSWORD=$(cat /run/secrets/db_password)
+MYSQL_ROOT_PASSWORD=$(cat /run/secrets/db_root_password)
+
+if [ ! -d "/var/lib/mysql/mysql" ]; then
+	mariadb-install-db --user=mysql --datadir=/var/lib/mysql
+
+	cat > /tmp/init.sql <<EOF
+CREATE DATABASE IF NOT EXISTS \`${MYSQL_DATABASE}\`;
+CREATE USER '${MYSQL_USER}'@'%' IDENTIFIED BY '${MYSQL_PASSWORD}';
+GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_USER}'@'%';
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
+EOF
+
+	exec mariadbd --user=mysql --init-file=/tmp/init.sql
+fi
+
+exec mariadbd --user=mysql
+```
+
+**Why a script exists at all.** The subject forbids pre-built images and forbids passwords in the Dockerfile. A `RUN` instruction finishes at build time, long before any daemon exists, and the volume mounts over `/var/lib/mysql` only at run time. So the database, the account and the passwords can only be created when the container starts.
+
+**`mkdir -p /run/mysqld`, because there is no init system.** On a real Debian machine `systemd-tmpfiles` recreates that directory at every boot, since `/run` is a tmpfs and no package may ship files there. A container has no systemd, so nothing does it, and `mariadbd` aborts with *"Can't start server : Bind on unix socket"*.
+
+**Two values come from files, two from the environment.** Passwords arrive as Docker secrets mounted at `/run/secrets/`, so they never appear in `docker inspect` or in the image. The database and account names are non-secret and arrive as environment variables from `.env`.
+
+**The guard makes initialisation happen exactly once.** `/var/lib/mysql/mysql` is the system database directory, created by `mariadb-install-db`. Its presence means the volume already holds a working installation, so a restart must not touch it.
+
+<br>
+
+<details>
+<summary><b>Two failures that shaped this script</b></summary>
+
+<br>
+
+**1. The guard never fired, and nothing was created.**
+
+The container started, reported `ready for connections`, and looked healthy. But `SHOW DATABASES` had no `wordpress` and there was no `wp_user`.
+
+The Debian package had already run `mariadb-install-db` during `apt-get install`, so `/var/lib/mysql/mysql` existed **inside the image**. The guard was false on the very first boot and skipped everything.
+
+```
+apt-get install mariadb-server
+      ↓ postinst runs mariadb-install-db at BUILD time
+/var/lib/mysql/mysql exists in the image
+      ↓
+if [ ! -d /var/lib/mysql/mysql ]  → false
+      ↓
+no database, no account, no root password
+```
+
+The fix is `rm -rf /var/lib/mysql/*` in the Dockerfile. It also removes about 113 MB of dead weight, since `ib_logfile0` alone is 100 MB.
+
+<br>
+
+**2. `--bootstrap` cannot create accounts.**
+
+The obvious way to run SQL before the server is listening is bootstrap mode, which reads statements from standard input with no socket and no authentication. `CREATE DATABASE` works there. The other three do not:
+
+```
+CREATE DATABASE d1;                             OK
+CREATE USER 'u1'@'%' IDENTIFIED BY 'p';         ERROR 1290
+GRANT ALL PRIVILEGES ON d1.* TO 'u1'@'%';       ERROR 1290
+ALTER USER 'root'@'localhost' IDENTIFIED BY ''; ERROR 1290
+```
+
+> ERROR 1290: The MariaDB server is running with the --skip-grant-tables option so it cannot execute this statement
+
+**Bootstrap is not "no privilege checks", it is "no grant tables".** The privilege tables are never loaded, so every account-management statement is refused. That is the opposite of the intuitive reading.
+
+**`--init-file` is the correct tool.** The real daemon starts normally, with grant tables loaded, and executes the file before accepting any connection. MariaDB documents it as *"Name of a file containing SQL statements that will be executed by the server on startup"*, with *"each statement should be on a new line, and end with a semicolon."*
+
+```
+mariadbd --init-file=... starts
+   ↓ grant tables loaded
+   ↓ executes the file
+   ↓ opens socket and port
+ready for connections
+```
+
+</details>
+
+<br>
+
+**The last line is `exec`, and that is not cosmetic.** The script is PID 1. `exec` replaces its process image with `mariadbd` while keeping the same PID, so the daemon becomes PID 1 and receives `SIGTERM` from `docker stop` directly. Without it the script would exit and the container would stop, or bash would linger as PID 1 and swallow the signal.
+
+**There are two `exec` lines and only one ever runs:**
+
+```
+first boot                          later boots
+datadir empty                       datadir already initialised
+   ↓ guard true                        ↓ guard false
+mariadb-install-db                  (block skipped)
+write init.sql
+   ↓
+exec mariadbd --init-file=...       exec mariadbd
+   ↓                                   ↓
+PID 1, runs the SQL, then serves    PID 1, serves
+```
 
 </details>
 
