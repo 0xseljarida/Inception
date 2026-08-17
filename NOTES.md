@@ -42,7 +42,7 @@
 <summary><h1>01 · Why containers were invented</h1></summary>
 
 
-<p align="center"><img src="assets/image_of_container.jpg" width="460"></p>
+<p align="center"><img src="assets/image_of_container.jpg" width="500"></p>
 <p align="center"><i>the word was borrowed from shipping · the mechanism was not</i></p>
 
 **One server. 200 customers. Each one wants their own isolated website.**
@@ -94,7 +94,7 @@ Three options existed:
 <summary><h1>02 · What is a container?</h1></summary>
 
 
-<p align="center"><img src="assets/image_linux_peng.jpeg" width="220"></p>
+<p align="center"><img src="assets/image_linux_peng.jpeg" width="500"></p>
 <p align="center"><i>namespaces and cgroups are Linux kernel features, not Docker features</i></p>
 
 > **A container is a Linux process running in an isolated environment, where the kernel restricts and controls what the process can see and access.**
