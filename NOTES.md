@@ -904,7 +904,7 @@ The kernel knows nothing about the right-hand column. MariaDB knows nothing abou
 <summary><h1>07 · MariaDB</h1></summary>
 
 
-<p align="center"><img src="assets/mariadb_image.png" width="190"></p>
+<p align="center"><img src="assets/mariadb_image.png" width="400"></p>
 <p align="center"><i>the seal came with the fork · MySQL's dolphin stayed with Oracle</i></p>
 
 <a id="a--what-mariadb-is"></a>
