@@ -1239,7 +1239,10 @@ PID 1, runs the SQL, then serves    PID 1, serves
 
 <br>
 
-### WordPress is not a server
+<details>
+<summary><b>WordPress is not a server</b></summary>
+
+<br>
 
 **This is the part that trips people up.** MariaDB is a daemon: install it, start it, and something is listening. WordPress is not. It is a directory of PHP source files:
 
@@ -1278,9 +1281,14 @@ mariadb            stores the content
 
 **The container named `wordpress` is really php-fpm plus the WordPress files.** That is why the subject forbids nginx inside it: the executor and the web server are two different jobs, in two different containers.
 
+</details>
+
 <br>
 
-### Where the state actually lives
+<details>
+<summary><b>Where the state actually lives</b></summary>
+
+<br>
 
 **WordPress state is split across two places, and both must survive a rebuild.**
 
@@ -1302,9 +1310,14 @@ options  terms  termmeta  term_taxonomy  term_relationships  links
 
 **Uploaded media is the exception that is easy to forget.** An image you upload is a real file under `wp-content/uploads/`, and only its metadata goes in the database. Restore the database alone and every image is a broken link, which is why the WordPress volume covers the files and the MariaDB volume covers the tables.
 
+</details>
+
 <br>
 
-### `wp-config.php` is where the two halves meet
+<details>
+<summary><b><code>wp-config.php</code> is where the two halves meet</b></summary>
+
+<br>
 
 **WordPress finds its database through one file.** From the official sample, `wp-config-sample.php`:
 
@@ -1320,9 +1333,14 @@ $table_prefix = 'wp_';
 
 **This file is also why the entrypoint cannot be skipped.** It contains a password, so it cannot be baked into the image or committed, and it must be generated at container start from the secrets in `/run/secrets/`.
 
+</details>
+
 <br>
 
-### Versions
+<details>
+<summary><b>Versions</b></summary>
+
+<br>
 
 | | Required by WordPress 7.0.4 | What this project has |
 |:--|:--|:--|
@@ -1331,6 +1349,8 @@ $table_prefix = 'wp_';
 | **HTTPS** | *"Required for every install."* | nginx, TLSv1.2 and TLSv1.3 |
 
 **Debian 12 ships PHP 8.2, below the recommended 8.3.** That is fine, WordPress documents 7.4 as the supported floor, and the base image is fixed by the subject anyway.
+
+</details>
 
 <br>
 
