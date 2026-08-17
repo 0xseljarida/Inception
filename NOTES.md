@@ -32,6 +32,8 @@
 * [07 · MariaDB](#07--mariadb)
     * [a · What MariaDB is](#a--what-mariadb-is)
     * [b · MariaDB, the container](#b--mariadb-the-container)
+* [08 · WordPress](#08--wordpress)
+    * [a · What WordPress is](#a--what-wordpress-is)
 
 ---
 
@@ -39,6 +41,9 @@
 <details>
 <summary><h1>01 · Why containers were invented</h1></summary>
 
+
+<p align="center"><img src="assets/image_of_container.jpg" width="460"></p>
+<p align="center"><i>the word was borrowed from shipping · the mechanism was not</i></p>
 
 **One server. 200 customers. Each one wants their own isolated website.**
 
@@ -88,6 +93,9 @@ Three options existed:
 <details>
 <summary><h1>02 · What is a container?</h1></summary>
 
+
+<p align="center"><img src="assets/image_linux_peng.jpeg" width="220"></p>
+<p align="center"><i>namespaces and cgroups are Linux kernel features, not Docker features</i></p>
 
 > **A container is a Linux process running in an isolated environment, where the kernel restricts and controls what the process can see and access.**
 
@@ -895,6 +903,10 @@ The kernel knows nothing about the right-hand column. MariaDB knows nothing abou
 <details>
 <summary><h1>07 · MariaDB</h1></summary>
 
+
+<p align="center"><img src="assets/mariadb_image.png" width="190"></p>
+<p align="center"><i>the seal came with the fork · MySQL's dolphin stayed with Oracle</i></p>
+
 <a id="a--what-mariadb-is"></a>
 <details>
 <summary><h2>a · What MariaDB is</h2></summary>
@@ -1196,6 +1208,225 @@ exec mariadbd --init-file=...       exec mariadbd
    ↓                                   ↓
 PID 1, runs the SQL, then serves    PID 1, serves
 ```
+
+</details>
+
+</details>
+
+<a id="08--wordpress"></a>
+<details>
+<summary><h1>08 · WordPress</h1></summary>
+
+
+<p align="center"><img src="assets/wordpress_images.png" width="300"></p>
+<p align="center"><i>PHP source code, not a server</i></p>
+
+<a id="a--what-wordpress-is"></a>
+<details>
+<summary><h2>a · What WordPress is</h2></summary>
+
+
+> **WordPress is open-source content management system (CMS) software, written in PHP, that stores its content in a MySQL or MariaDB database and generates web pages from it on request.**
+
+**WordPress describes itself in one line:** *"built on PHP and MariaDB, and licensed under the GPLv2."* Those two names are not a coincidence for this project. They are the two other containers.
+
+**It does four things:**
+
+- **Stores content in a database**, posts, pages, comments, users, settings.
+- **Generates pages on request** by executing PHP that queries that database and returns HTML.
+- **Provides an administration interface** at `/wp-admin` for writing and configuring, with no file editing required.
+- **Extends itself** through themes, which decide appearance, and plugins, which add behaviour.
+
+<br>
+
+### WordPress is not a server
+
+**This is the part that trips people up.** MariaDB is a daemon: install it, start it, and something is listening. WordPress is not. It is a directory of PHP source files:
+
+```
+wordpress/
+├── index.php
+├── wp-admin/          the admin interface
+├── wp-includes/       the core library
+├── wp-content/        themes, plugins, uploads
+├── wp-config.php      credentials and settings
+└── ... ~2500 files
+```
+
+**Files do not execute themselves, and they do not speak HTTP.** Nothing in that directory listens on a port. Two separate programs are needed around it, and neither one is WordPress:
+
+| Missing capability | Provided by |
+|:--|:--|
+| accept HTTPS requests, serve static files | **nginx** |
+| execute the PHP source | **php-fpm** |
+| store and return the content | **mariadb** |
+
+**That table is the whole three-container architecture.** The subject's split is not arbitrary, it follows what WordPress genuinely is: code that needs an executor in front of it and a database behind it.
+
+```
+browser
+  │  HTTPS 443
+  ▼
+nginx              terminates TLS, serves .css .js .jpg itself
+  │  FastCGI 9000  forwards anything .php
+  ▼
+php-fpm            executes the WordPress PHP code
+  │  SQL 3306
+  ▼
+mariadb            stores the content
+```
+
+**The container named `wordpress` is really php-fpm plus the WordPress files.** That is why the subject forbids nginx inside it: the executor and the web server are two different jobs, in two different containers.
+
+<br>
+
+### Where the state actually lives
+
+**WordPress state is split across two places, and both must survive a rebuild.**
+
+```
+database (12 tables)              filesystem (wp-content/)
+├── wp_posts       content        ├── uploads/   media files
+├── wp_options     settings       ├── themes/
+├── wp_users       accounts       └── plugins/
+├── wp_comments
+├── wp_terms, wp_postmeta, ...
+```
+
+**A default single-site install creates exactly 12 tables**, all prefixed `wp_` by default. Verified by reading `wp-admin/includes/schema.php` in the 7.0.4 tarball:
+
+```
+posts  postmeta  comments  commentmeta  users  usermeta
+options  terms  termmeta  term_taxonomy  term_relationships  links
+```
+
+**Uploaded media is the exception that is easy to forget.** An image you upload is a real file under `wp-content/uploads/`, and only its metadata goes in the database. Restore the database alone and every image is a broken link, which is why the WordPress volume covers the files and the MariaDB volume covers the tables.
+
+<br>
+
+### `wp-config.php` is where the two halves meet
+
+**WordPress finds its database through one file.** From the official sample, `wp-config-sample.php`:
+
+```php
+define( 'DB_NAME', 'database_name_here' );
+define( 'DB_USER', 'username_here' );
+define( 'DB_PASSWORD', 'password_here' );
+define( 'DB_HOST', 'localhost' );
+$table_prefix = 'wp_';
+```
+
+**`DB_HOST` is the line that changes for Docker.** On a normal server WordPress and the database share a machine, so `localhost` works. Here they are separate containers, so it becomes the service name `mariadb`, resolved by Docker's internal DNS on the custom network.
+
+**This file is also why the entrypoint cannot be skipped.** It contains a password, so it cannot be baked into the image or committed, and it must be generated at container start from the secrets in `/run/secrets/`.
+
+<br>
+
+### Versions
+
+| | Required by WordPress 7.0.4 | What this project has |
+|:--|:--|:--|
+| **PHP** | 8.3+ recommended, 7.4+ supported | 8.2.33, from Debian 12 |
+| **Database** | MariaDB 10.11+ or MySQL 8.0+ | MariaDB 10.11.18 |
+| **HTTPS** | *"Required for every install."* | nginx, TLSv1.2 and TLSv1.3 |
+
+**Debian 12 ships PHP 8.2, below the recommended 8.3.** That is fine, WordPress documents 7.4 as the supported floor, and the base image is fixed by the subject anyway.
+
+<br>
+
+<details>
+<summary><b>DEEPDIVE: php-fpm and FastCGI</b></summary>
+
+<br>
+
+> **FPM (FastCGI Process Manager) is a primary PHP FastCGI implementation containing some features (mostly) useful for heavy-loaded sites.**
+>
+> <sub><i>the PHP manual's own definition</i></sub>
+
+**Two separate ideas are bundled in that name.** FastCGI is a protocol. Process manager is what php-fpm adds on top of it.
+
+<br>
+
+**The problem FastCGI solves.** The original mechanism was CGI, and it created one process per request:
+
+```
+CGI                                FastCGI
+──────────────────────────────     ──────────────────────────────
+request arrives                    request arrives
+  ↓ fork()                           ↓ (php-fpm already running)
+  ↓ exec php                         ↓ send over an open socket
+  ↓ start the interpreter            ↓ an idle worker picks it up
+  ↓ compile the script               ↓ compile (or hit opcache)
+  ↓ run it                           ↓ run it
+  ↓ write stdout, exit               ↓ write the response back
+process destroyed                  worker stays alive for the next one
+```
+
+**The cost being avoided is interpreter startup.** WordPress loads hundreds of PHP files per request. Paying process creation plus interpreter initialisation each time is the difference between a usable site and an unusable one.
+
+**FastCGI is a binary protocol, not HTTP.** nginx does not proxy the HTTP request onward. It translates it into FastCGI records: the request parameters become key/value pairs, and the body and response are streamed as typed records over one connection.
+
+```
+nginx                                      php-fpm
+  │  FCGI_BEGIN_REQUEST                ──►  │
+  │  FCGI_PARAMS  SCRIPT_FILENAME=...  ──►  │  which file to run
+  │               REQUEST_METHOD=GET   ──►  │
+  │               QUERY_STRING=...     ──►  │
+  │  FCGI_STDIN   (POST body)          ──►  │
+  │                                         │  executes the PHP
+  │  ◄── FCGI_STDOUT  headers + HTML        │
+  │  ◄── FCGI_END_REQUEST                   │
+```
+
+**`SCRIPT_FILENAME` is the important one.** php-fpm does not receive the PHP code, it receives a **path**. It opens that path on its own filesystem and executes it. So both containers must see the same WordPress files, which is why they share the volume.
+
+<br>
+
+**The process manager half.** php-fpm runs a master process and a pool of workers:
+
+```
+php-fpm master        reads config, spawns and reaps workers, holds the socket
+├── worker            one request at a time
+├── worker
+└── worker            pm = dynamic, count adjusts with load
+```
+
+**The master never executes PHP.** It supervises. That division is what lets a worker crash on a fatal error without taking the service down, and it is why php-fpm is the process that belongs at PID 1.
+
+<br>
+
+**Two Debian defaults have to be changed for this project.** Measured in a `debian:bookworm` container with `php-fpm` installed:
+
+```
+listen = /run/php/php8.2-fpm.sock     ← a Unix socket, not port 9000
+;daemonize = yes                      ← the default is to background itself
+```
+
+**The Unix socket cannot cross a container boundary.** It is a file in the mount namespace of the wordpress container, so nginx in another container has no path to it. The subject's `fastcgi_pass wordpress:9000` requires a TCP listener, so the pool config becomes `listen = 9000`.
+
+**And the daemonize default would kill the container.** php-fpm backgrounds itself by default, the foreground process exits, and Docker sees PID 1 exit and stops the container. `php-fpm8.2 -F` forces it to stay in the foreground, exactly the § 06 e problem.
+
+</details>
+
+<br>
+
+<details>
+<summary><b>History: a fork of an abandoned blog script</b></summary>
+
+<br>
+
+**WordPress began in 2003 as a fork of b2/cafelog**, a PHP blogging script whose original developer had stopped maintaining it. Matt Mullenweg and Mike Little forked it and kept it going under the GPL.
+
+**It was a blogging tool for years before it was a CMS.** The vocabulary still shows it: the main content table is `wp_posts`, and pages are stored there too, as posts with a different `post_type`.
+
+**The comparison with MariaDB is worth noticing.** Both projects in this stack exist because of a fork:
+
+```
+b2/cafelog  ──abandoned──►  WordPress   (2003)
+MySQL       ──acquired──►   MariaDB     (2009)
+```
+
+</details>
 
 </details>
 
