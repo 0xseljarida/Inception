@@ -912,6 +912,37 @@ The kernel knows nothing about the right-hand column. MariaDB knows nothing abou
 <summary><h2>a · What MariaDB is</h2></summary>
 
 
+<details>
+<summary><b>History: why a fork of MySQL exists</b></summary>
+
+<br>
+
+**MariaDB was created in 2009 as a fork of MySQL by its original developers**, after Oracle acquired MySQL through its purchase of Sun Microsystems.
+
+**The goal was an independent, community-driven alternative** to an Oracle-controlled MySQL, while keeping strong MySQL compatibility.
+
+**That compatibility explains the naming you meet everywhere in this project.** MariaDB kept the wire protocol on port 3306, the SQL syntax, the system table names, and the on-disk paths:
+
+```
+/var/lib/mysql          the data directory
+/run/mysqld/mysqld.sock the Unix socket
+mysql                   the system database
+mysql                   the Linux system account
+```
+
+**The binaries were renamed in MariaDB 10.5, and the old names survive as symlinks:**
+
+```
+/usr/bin/mysql    ──symlink──►  /usr/bin/mariadb      the client
+/usr/sbin/mysqld  ──symlink──►  /usr/sbin/mariadbd    the daemon
+```
+
+**Prefer the `mariadb` names.** The `mysql` symlinks exist only so that existing scripts keep working.
+
+</details>
+
+<br>
+
 > **MariaDB is an open-source relational database management system (RDBMS) that stores and manages structured data in tables and provides an SQL interface for accessing and manipulating that data.**
 
 **It does four things:**
@@ -1003,37 +1034,6 @@ client                                   server (mariadbd)
 | decodes result packets | reads and writes the files in `/var/lib/mysql` |
 
 **This is why WordPress never runs the `mariadb` binary.** PHP links a connector library that produces the same packets, so `mariadbd` cannot tell whether a query came from the CLI or from a web request.
-
-</details>
-
-<br>
-
-<details>
-<summary><b>History: why a fork of MySQL exists</b></summary>
-
-<br>
-
-**MariaDB was created in 2009 as a fork of MySQL by its original developers**, after Oracle acquired MySQL through its purchase of Sun Microsystems.
-
-**The goal was an independent, community-driven alternative** to an Oracle-controlled MySQL, while keeping strong MySQL compatibility.
-
-**That compatibility explains the naming you meet everywhere in this project.** MariaDB kept the wire protocol on port 3306, the SQL syntax, the system table names, and the on-disk paths:
-
-```
-/var/lib/mysql          the data directory
-/run/mysqld/mysqld.sock the Unix socket
-mysql                   the system database
-mysql                   the Linux system account
-```
-
-**The binaries were renamed in MariaDB 10.5, and the old names survive as symlinks:**
-
-```
-/usr/bin/mysql    ──symlink──►  /usr/bin/mariadb      the client
-/usr/sbin/mysqld  ──symlink──►  /usr/sbin/mariadbd    the daemon
-```
-
-**Prefer the `mariadb` names.** The `mysql` symlinks exist only so that existing scripts keep working.
 
 </details>
 
@@ -1218,7 +1218,7 @@ PID 1, runs the SQL, then serves    PID 1, serves
 <summary><h1>08 · WordPress</h1></summary>
 
 
-<p align="center"><img src="assets/wordpress_images.png" width="300"></p>
+<p align="center"><img src="assets/wordpress_images.png" width="500"></p>
 <p align="center"><i>PHP source code, not a server</i></p>
 
 <a id="a--what-wordpress-is"></a>
