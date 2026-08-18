@@ -1591,6 +1591,62 @@ The line is commented out and the built-in default is `yes`, so php-fpm would fo
 <br>
 
 <details>
+<summary><b>Overriding one line, mariadb-style</b></summary>
+
+<br>
+
+**`pool.d/` behaves like `mariadb.conf.d/` from § 07 b.** Every `*.conf` file in it is included, and two files can declare the same pool name. So instead of replacing the whole shipped `www.conf`, a second file can carry just the one directive that is wrong:
+
+```
+www.conf     [www]  user=www-data  group=www-data  pm=dynamic ...  listen=/run/php/...sock
+www2.conf    [www]  listen=9000
+```
+
+**Measured: declaring `[www]` twice is not an error.** The master process starts, and whichever file loads *last* wins for any directive it repeats, while everything it does not repeat survives from the other file. Same rule as MariaDB's *"if an option is set multiple times, the later setting will override the earlier setting."* No full pool rewrite is needed, only the one line that is wrong.
+
+**The header is not optional, even for a one-line override.** A file containing only `listen = 9000`, with no `[www]` above it, fails to start at all:
+
+```
+ERROR: [.../www2.conf:3] unknown entry 'listen'
+ERROR: Unable to include /etc/php/8.2/fpm/pool.d/www2.conf from /etc/php/8.2/fpm/php-fpm.conf
+ERROR: FPM initialization failed
+```
+
+**Without a section header, `listen` belongs to no pool**, and php-fpm has no global `listen` directive to fall back to, so it refuses to start.
+
+<br>
+
+**"Later" means alphabetically later, and that is easy to get backwards.** Files in `pool.d/` load in filename order, exactly like `mariadb.conf.d/`. The first attempt named the override file `www-listen.conf`, expecting it to load after `www.conf`:
+
+```
+www-listen.conf   ← intended to win
+www.conf          ← the shipped default
+```
+
+**It does the opposite.** In ASCII, `-` (0x2D) sorts before `.` (0x2E), so `www-listen.conf` loads *before* `www.conf`. The shipped file is then the one read last, its Unix-socket `listen` applies, and the override is silently discarded. Confirmed with php-fpm's own config dump:
+
+```
+$ php-fpm8.2 -tt | grep listen
+listen = /run/php/php8.2-fpm.sock     ← the override never took effect
+```
+
+**No error anywhere.** `php-fpm -t` reports success and the master process starts normally, because nothing here is invalid, it just resolves to the wrong value. This is the dangerous kind of bug: everything looks fine except the one behaviour that matters.
+
+**The fix is the filename, not the content.** Name the override so it sorts after `www.conf`:
+
+```ini
+; www2.conf
+[www]
+listen = 0.0.0.0:9000
+```
+
+`www2.conf` follows `www.conf` alphabetically (`2` is 0x32, after `.` at 0x2E), so it loads second and its `listen` is the one that survives.
+
+</details>
+
+<br>
+
+<details>
 <summary><b>WordPress core does not come from apt</b></summary>
 
 <br>
