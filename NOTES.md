@@ -1466,7 +1466,10 @@ tools/entrypoint.sh     what happens on every container start
 
 <br>
 
-### How the three containers link
+<details>
+<summary><b>How the three containers link</b></summary>
+
+<br>
 
 **Nothing here talks to anything by accident.** Every arrow below is a different protocol crossing a network namespace boundary:
 
@@ -1500,9 +1503,14 @@ reads .css .js .jpg                executes .php
 
 **FastCGI does not send code, it sends a path.** nginx forwards the request with `SCRIPT_FILENAME=/var/www/html/index.php`, and php-fpm opens that path on its own filesystem. If the two containers did not mount the same volume, php-fpm would be told to run a file that does not exist on its side. That is why one volume is mounted twice.
 
+</details>
+
 <br>
 
-### What the image needs
+<details>
+<summary><b>What the image needs</b></summary>
+
+<br>
 
 **WordPress requires exactly two PHP extensions.** Its own hosting handbook lists `json` and `mysqli` as required, and everything else as highly recommended.
 
@@ -1523,9 +1531,14 @@ stream_socket_client(): Unable to connect to ssl://api.wordpress.org:443
 
 **Many published Dockerfiles never mention it and still work.** They omit `--no-install-recommends`, and `libcurl4` carries `Recommends: ca-certificates`, which apt installs by default. Being explicit means the package list actually describes the image.
 
+</details>
+
 <br>
 
-### The two Debian defaults that are wrong
+<details>
+<summary><b>The two Debian defaults that are wrong</b></summary>
+
+<br>
 
 **Debian configures php-fpm for a web server sitting on the same machine.** Both of those assumptions break inside a container.
 
@@ -1551,9 +1564,14 @@ The line is commented out and the built-in default is `yes`, so php-fpm would fo
 
 **The port is never published to the host.** Only the docker network reaches 9000, which is what keeps nginx the sole entrypoint.
 
+</details>
+
 <br>
 
-### WordPress core does not come from apt
+<details>
+<summary><b>WordPress core does not come from apt</b></summary>
+
+<br>
 
 **`apt-get install wordpress` is the wrong instinct.** Debian does package it, but the version is frozen at whatever the release shipped with:
 
@@ -1575,9 +1593,14 @@ md5 hash verified: 851346e2e0b6fed73cdd7ce1525d43a7
 Success: WordPress downloaded.
 ```
 
+</details>
+
 <br>
 
-### wp-cli
+<details>
+<summary><b>wp-cli</b></summary>
+
+<br>
 
 **wp-cli is a PHP program that loads WordPress core and calls its functions directly.** It ships as a `.phar`, a PHP Archive, which is an entire application packed into one executable file.
 
@@ -1590,9 +1613,14 @@ wp-cli                                php CLI → WordPress code → mariadb
 
 **`--allow-root` is not optional here.** wp-cli refuses to run as UID 0, as a guard against leaving a whole site root-owned. The entrypoint is root, so the flag has to be there.
 
+</details>
+
 <br>
 
-### Build time and run time
+<details>
+<summary><b>Build time and run time</b></summary>
+
+<br>
 
 **"Installing WordPress" is three separate operations, and they do not belong in the same place:**
 
@@ -1610,9 +1638,14 @@ wp-cli                                php CLI → WordPress code → mariadb
 
 **It happens exactly once.** The same page continues: *"If you mount a non-empty volume [...] the pre-existing files are obscured by the mount."* Once `/home/sel-jari/data/wordpress` holds anything, rebuilding the image will never refresh it. That is correct behaviour for a CMS, since the volume owns the content, but it is also why the entrypoint still needs a guard of its own.
 
+</details>
+
 <br>
 
-### What the entrypoint must do
+<details>
+<summary><b>What the entrypoint must do</b></summary>
+
+<br>
 
 **Same reasoning as § 07 b.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
 
@@ -1622,9 +1655,14 @@ wp-cli                                php CLI → WordPress code → mariadb
 4. **First boot only:** `wp config create`, then `wp core install`, then `wp user create` for the second account. The administrator name must not contain `admin` or `administrator` in any form.
 5. **End with `exec "$@"`**, so php-fpm replaces the script and becomes PID 1.
 
+</details>
+
 <br>
 
-### Ownership
+<details>
+<summary><b>Ownership</b></summary>
+
+<br>
 
 **The php-fpm master starts as root and drops its workers to `www-data`:**
 
@@ -1643,6 +1681,8 @@ chown -R www-data:www-data /var/www/html
 **Skipping it fails silently.** The site loads, because reading is allowed. Uploads, plugin installs and updates are the things that break.
 
 **UID 33 then appears on the host.** As § 06 f says, UIDs cross the boundary unchanged, and copy-up preserves them, so `ls -l /home/sel-jari/data/wordpress` shows UID 33 rather than `sel-jari`. That is correct, not a bug.
+
+</details>
 
 </details>
 
