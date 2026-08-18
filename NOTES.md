@@ -34,6 +34,7 @@
     * [b · MariaDB, the container](#b--mariadb-the-container)
 * [08 · WordPress](#08--wordpress)
     * [a · What WordPress is](#a--what-wordpress-is)
+    * [b · The WordPress container](#b--the-wordpress-container)
 
 ---
 
@@ -1447,6 +1448,201 @@ MySQL       ──acquired──►   MariaDB     (2009)
 ```
 
 </details>
+
+</details>
+
+<a id="b--the-wordpress-container"></a>
+<details>
+<summary><h2>b · The WordPress container</h2></summary>
+
+
+**Three files build this service**, the same split as § 07 b:
+
+```
+Dockerfile              how the image is built
+conf/www.conf           what settings php-fpm runs with
+tools/entrypoint.sh     what happens on every container start
+```
+
+<br>
+
+### How the three containers link
+
+**Nothing here talks to anything by accident.** Every arrow below is a different protocol crossing a network namespace boundary:
+
+```
+browser
+   │  HTTPS, port 443
+   ▼
+nginx        terminates TLS, serves .css .js .jpg itself
+   │  FastCGI, port 9000
+   ▼
+wordpress    php-fpm executes the .php files
+   │  MySQL protocol, port 3306
+   ▼
+mariadb      stores posts, users, settings
+```
+
+**The dependency runs one way only.** php-fpm binds port 9000 and waits, whether or not nginx exists. mariadb binds 3306 and waits, whether or not wordpress exists. Nothing calls back upward, only the request travels down.
+
+**nginx and wordpress also share a filesystem, not just a network.** This is the part that is easy to miss:
+
+```
+              named volume: the WordPress files
+              /home/sel-jari/data/wordpress
+                          │
+        ┌─────────────────┴─────────────────┐
+        ▼                                   ▼
+nginx                              wordpress
+/var/www/html                      /var/www/html
+reads .css .js .jpg                executes .php
+```
+
+**FastCGI does not send code, it sends a path.** nginx forwards the request with `SCRIPT_FILENAME=/var/www/html/index.php`, and php-fpm opens that path on its own filesystem. If the two containers did not mount the same volume, php-fpm would be told to run a file that does not exist on its side. That is why one volume is mounted twice.
+
+<br>
+
+### What the image needs
+
+**WordPress requires exactly two PHP extensions.** Its own hosting handbook lists `json` and `mysqli` as required, and everything else as highly recommended.
+
+| package | why |
+|:--|:--|
+| `php8.2-fpm` | the daemon itself, and PID 1 |
+| `php8.2-mysql` | provides `mysqli`, there is no database access without it |
+| `ca-certificates` | wp-cli downloads over HTTPS and PHP validates against the system CA store |
+
+**`json` is not a package.** It has been compiled into PHP since 8.0, so it is already present.
+
+**`ca-certificates` is the one that gets forgotten.** Without it the build dies here:
+
+```
+error:0A000086:SSL routines::certificate verify failed
+stream_socket_client(): Unable to connect to ssl://api.wordpress.org:443
+```
+
+**Many published Dockerfiles never mention it and still work.** They omit `--no-install-recommends`, and `libcurl4` carries `Recommends: ca-certificates`, which apt installs by default. Being explicit means the package list actually describes the image.
+
+<br>
+
+### The two Debian defaults that are wrong
+
+**Debian configures php-fpm for a web server sitting on the same machine.** Both of those assumptions break inside a container.
+
+**1. It listens on a Unix socket.**
+
+```
+/etc/php/8.2/fpm/pool.d/www.conf:41
+listen = /run/php/php8.2-fpm.sock
+```
+
+A Unix socket is a filesystem object. nginx lives in a different mount namespace, so that path simply does not exist for it. `listen = 9000` binds a TCP port instead, which the docker network can route.
+
+> Measured: `listen = 9000` binds `[::]:9000`, not `0.0.0.0:9000`. `/proc/net/tcp` stays empty and the socket shows up in `/proc/net/tcp6`. IPv4 clients still reach it through dual-stack. Write `listen = 0.0.0.0:9000` to make it explicit.
+
+**2. It daemonises.**
+
+```
+/etc/php/8.2/fpm/php-fpm.conf:101
+;daemonize = yes
+```
+
+The line is commented out and the built-in default is `yes`, so php-fpm would fork, the parent would exit, and PID 1 would be gone. `php-fpm8.2 -F` keeps it in the foreground. § 06 e covers why that matters.
+
+**The port is never published to the host.** Only the docker network reaches 9000, which is what keeps nginx the sole entrypoint.
+
+<br>
+
+### WordPress core does not come from apt
+
+**`apt-get install wordpress` is the wrong instinct.** Debian does package it, but the version is frozen at whatever the release shipped with:
+
+```
+Candidate: 6.1.9+dfsg1-0+deb12u1
+```
+
+**And it drags a second web server into the container:**
+
+```
+apache2   apache2-bin   apache2-data   libapache2-mod-php8.2   ...
+```
+
+**Core is source code, not a package.** It comes from `wordpress.org`, or from wp-cli, which checks the download itself:
+
+```
+Downloading WordPress 7.0.4 (en_US)...
+md5 hash verified: 851346e2e0b6fed73cdd7ce1525d43a7
+Success: WordPress downloaded.
+```
+
+<br>
+
+### wp-cli
+
+**wp-cli is a PHP program that loads WordPress core and calls its functions directly.** It ships as a `.phar`, a PHP Archive, which is an entire application packed into one executable file.
+
+**It needs no web server, and that is the property the container depends on.** Nothing is listening while the entrypoint runs, yet `wp core install` can still create the tables and the accounts, because it is executing the same WordPress code a request would have executed.
+
+```
+a normal request    browser → nginx → php-fpm → WordPress code → mariadb
+wp-cli                                php CLI → WordPress code → mariadb
+```
+
+**`--allow-root` is not optional here.** wp-cli refuses to run as UID 0, as a guard against leaving a whole site root-owned. The entrypoint is root, so the flag has to be there.
+
+<br>
+
+### Build time and run time
+
+**"Installing WordPress" is three separate operations, and they do not belong in the same place:**
+
+| operation | needs | when |
+|:--|:--|:--|
+| `wp core download` | network | build time |
+| `wp config create` | the database password | run time |
+| `wp core install` | a reachable mariadb | run time |
+
+**The last two are impossible during a build.** Secrets are mounted at `/run/secrets/` only when the container starts, and no database exists while the image is being built.
+
+**Downloading core at build time still reaches the volume**, because of copy-up:
+
+> "If you mount an *empty volume* into a directory in the container in which files or directories exist, these files or directories are propagated (copied) into the volume by default."
+
+**It happens exactly once.** The same page continues: *"If you mount a non-empty volume [...] the pre-existing files are obscured by the mount."* Once `/home/sel-jari/data/wordpress` holds anything, rebuilding the image will never refresh it. That is correct behaviour for a CMS, since the volume owns the content, but it is also why the entrypoint still needs a guard of its own.
+
+<br>
+
+### What the entrypoint must do
+
+**Same reasoning as § 07 b.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
+
+1. **Read the passwords from `/run/secrets/`.** They are files, not environment variables, so nothing in `docker inspect` or `/proc/1/environ` reveals them.
+2. **Wait for mariadb.** Compose's `depends_on` waits for the container to start, not for `mariadbd` to finish its first-boot initialisation. A bounded retry that gives up after a set number of attempts is not an infinite loop.
+3. **Guard on `wp-config.php`.** Same shape as `[ ! -d /var/lib/mysql/mysql ]`: first boot configures, every later boot must leave existing content alone.
+4. **First boot only:** `wp config create`, then `wp core install`, then `wp user create` for the second account. The administrator name must not contain `admin` or `administrator` in any form.
+5. **End with `exec "$@"`**, so php-fpm replaces the script and becomes PID 1.
+
+<br>
+
+### Ownership
+
+**The php-fpm master starts as root and drops its workers to `www-data`:**
+
+```
+/etc/php/8.2/fpm/pool.d/www.conf:28
+user  = www-data
+group = www-data
+```
+
+**Those workers are what executes WordPress**, and WordPress writes into `wp-content/uploads`. Anything a `RUN` downloaded is owned by root, so the tree has to be handed over:
+
+```
+chown -R www-data:www-data /var/www/html
+```
+
+**Skipping it fails silently.** The site loads, because reading is allowed. Uploads, plugin installs and updates are the things that break.
+
+**UID 33 then appears on the host.** As § 06 f says, UIDs cross the boundary unchanged, and copy-up preserves them, so `ls -l /home/sel-jari/data/wordpress` shows UID 33 rather than `sel-jari`. That is correct, not a bug.
 
 </details>
 
