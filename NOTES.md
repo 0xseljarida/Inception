@@ -674,6 +674,28 @@ docker build -t my-nginx .
 ```
 
 
+**The instructions used in this project:**
+
+| Instruction | Role |
+|:--|:--|
+| `FROM` | names the base image to build on. Always the first instruction |
+| `RUN` | executes a command at build time, inside a temporary container |
+| `COPY` | copies files from the build context into the image |
+| `ADD` | like `COPY`, but also unpacks local tar archives and fetches URLs |
+| `WORKDIR` | sets the working directory for every instruction that follows, and for the running container. Creates it if missing |
+| `ENV` | sets an environment variable that stays in the final image |
+| `ARG` | build-time variable only. It does not exist in the running container |
+| `USER` | sets the UID for the instructions that follow, and for PID 1 |
+| `EXPOSE` | records a port as documentation |
+| `VOLUME` | declares a path as a volume |
+| `LABEL` | adds metadata: author, version, description |
+| `ENTRYPOINT` | the fixed command the container runs |
+| `CMD` | default arguments to `ENTRYPOINT`, or the whole command when there is no `ENTRYPOINT` |
+
+**`EXPOSE` is the one that gets misread.** It publishes nothing and opens nothing. Only `docker run -p` or Compose's `ports:` map a port to the host, and containers on the same docker network reach each other whether or not `EXPOSE` is present.
+
+**`ARG` is not a way to pass a secret.** Its value is baked into the layer and `docker history` prints it back.
+
 <a id="a--instructions-and-layers"></a>
 <details>
 <summary><h2>a · Instructions and layers</h2></summary>
