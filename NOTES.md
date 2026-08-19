@@ -778,7 +778,21 @@ RUN apt-get update \
 
 Now those files never exist in a committed layer at all.
 
-**`--no-install-recommends`** skips the packages Debian merely suggests. On a minimal image that is often tens of megabytes.
+**`--no-install-recommends`** skips the packages apt would pull in under `Recommends`. That is a distinct relationship from `Suggests`, which apt never installs automatically regardless of this flag. Skipped correctly, the size difference is not a rounding error: Canonical measured a 60% smaller image and about 15% faster builds after adding the flag across their Python website Dockerfiles.
+
+**It is a linter rule, not a personal habit.** hadolint's `DL3015` flags any `apt-get install` missing it, and a Depot.dev scan of real-world Dockerfiles found it triggered in 22% of them, meaning the other 78% already comply. `DL3009`, cleaning up `/var/lib/apt/lists/*` in the same layer, is the rule that pairs with it, covered above.
+
+**Fewer packages also means a smaller attack surface.** Every installed package is more code that can carry a CVE, which is why dropping unused recommends shows up in most Docker security checklists.
+
+**The flag can break things, deliberately.** Some packages genuinely need their recommends: fonts for a headless browser, locale or timezone data for some runtimes, `ca-certificates` for anything doing TLS, which is exactly the case hit later with `wp core download`. If a package that used to work fails after adding this flag, the missing recommend is the first suspect, and it gets added back explicitly, not fixed by dropping the flag.
+
+**A global alternative exists** for turning this off on every future `apt-get install` instead of repeating the flag each time:
+
+```dockerfile
+RUN echo 'APT::Install-Recommends "false";' > /etc/apt/apt.conf.d/99norecommends
+```
+
+Not needed here, since one `RUN` already installs every package this image needs. On a Debian desktop or dev machine, do not set this globally, recommends are usually what you actually want there.
 
 
 </details>
