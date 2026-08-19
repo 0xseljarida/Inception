@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 	ca-certificates \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY conf/www.conf /etc/php/8.2/fpm/pool.d/www-listen.conf
+COPY conf/www.conf /etc/php/8.2/fpm/pool.d/www2.conf
 
 ADD --chmod=755 https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar /usr/local/bin/wp
 
