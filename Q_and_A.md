@@ -26,6 +26,13 @@ What is php-fpm, in your own words? Is it a web server? What protocol does it sp
 
 Correct, keep the nuance: the master process doesn't execute PHP itself, it manages a pool of worker processes, and the workers do the executing. "FastCGI Process Manager" is literally the name.
 
+- **What it is**: a daemon that spawns and manages a pool of PHP worker processes, then hands each incoming request to one of them to execute the PHP code.
+- **Is it a web server**: no. It has no HTTP parsing, no static file serving, no listening for browser requests directly. It only understands FastCGI, so it needs a real web server (nginx) in front of it.
+- **Protocol**: FastCGI, not HTTP.
+
+<p align="center"><img src="assets/fastcgi_explained.png" width="500"></p>
+<p align="center"><i>FastCGI vs classic CGI: persistent worker processes instead of a fork per request.</i></p>
+
 </details>
 
 ---
