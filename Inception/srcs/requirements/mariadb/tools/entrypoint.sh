@@ -18,8 +18,8 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
 	ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
 EOF
 
-	exec mariadbd --user=mysql --init-file=/tmp/init.sql
+	exec "$@" --init-file=/tmp/init.sql
 fi
 
-exec mariadbd --user=mysql
+exec "$@"
 

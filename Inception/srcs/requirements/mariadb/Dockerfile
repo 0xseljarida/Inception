@@ -9,4 +9,5 @@ COPY conf/99-inception.cnf /etc/mysql/mariadb.conf.d/99-inception.cnf
 COPY --chmod=755 tools/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-#CMD ["mariadbd", "--user=mysql"]
+
+CMD ["mariadbd", "--user=mysql"]
