@@ -1018,6 +1018,66 @@ secrets:    files mounted read-only at /run/secrets/
 <br>
 
 <details>
+<summary><b>The keys, and what each one does</b></summary>
+
+<br>
+
+**A Dockerfile is a flat list of instructions. A Compose file is two levels**, and that split is the part worth getting straight first:
+
+```text
+docker-compose.yml
+│
+├── services:          what to run
+│   ├── mariadb:       service name, also its DNS hostname
+│   │   └── build, volumes, networks, secrets, env_file, restart ...
+│   └── wordpress:
+│
+├── networks:          resources the services reference by name
+├── volumes:
+└── secrets:
+```
+
+**A top-level block declares a resource. A key inside a service attaches it.** `volumes:` at the top level creates a volume, `volumes:` inside a service mounts it. Same word, two different jobs.
+
+| Top-level element | Role |
+|:--|:--|
+| `services` | the containers to run. Each key under it is a service name, and Compose's DNS resolves that name, not `container_name` |
+| `networks` | *"lets you configure named networks that can be reused across multiple services"* |
+| `volumes` | *"lets you configure named volumes that can be reused across multiple services"* |
+| `secrets` | *"defines or references sensitive data that is granted to the services"* |
+
+| Service-level key | Role |
+|:--|:--|
+| `build` | build configuration for creating an image from source. Points at the directory holding the Dockerfile |
+| `image` | the image to start the container from. Together with `build`, it names the image Compose produces |
+| `container_name` | a custom container name instead of the generated one. Not used for DNS |
+| `depends_on` | controls startup and shutdown order. `service_started` only waits for the process to exist, `service_healthy` waits for a passing `healthcheck` |
+| `environment` | environment variables set in the container, as an array or a map |
+| `env_file` | one or more files containing environment variables to pass to the container |
+| `networks` | the networks this container attaches to, referencing entries under the top-level `networks` |
+| `volumes` | mounts host paths or named volumes into the container |
+| `secrets` | grants access to secrets defined at top level. Each one lands at `/run/secrets/<name>` |
+| `ports` | publishes a container port on the host. Only nginx needs this |
+| `expose` | records a port as reachable from other containers. Documentation only, like Dockerfile `EXPOSE` |
+| `restart` | the policy applied on container termination: `no`, `always`, `on-failure`, `unless-stopped` |
+| `command` | overrides the image's `CMD` |
+| `entrypoint` | overrides the image's `ENTRYPOINT` |
+
+**Two of these carry the project's hard constraints.** `driver_opts` under a top-level volume is what pins a named volume to `/home/sel-jari/data/` (`type: none`, `o: bind`, `device:` an absolute host path), and a user-defined network is what provides DNS at all:
+
+> Containers on the default bridge network can only access each other by IP addresses, unless you use the `--link` option, which is considered legacy.
+>
+> User-defined bridges provide automatic DNS resolution between containers.
+>
+> <sub><i>Docker, bridge network driver</i></sub>
+
+**That second sentence is why `DB_HOST=mariadb` resolves** inside the WordPress entrypoint, and why the subject can forbid `--link` without leaving the containers unable to find each other.
+
+</details>
+
+<br>
+
+<details>
 <summary><b>Ignore the <code>version:</code> line in old examples</b></summary>
 
 <br>
