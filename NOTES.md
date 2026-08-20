@@ -64,7 +64,8 @@ Three options existed:
 
 > **Note:** the "200 customers" framing above is a teaching device, not history.
 > A 2005 host would have answered "shared hosting", and the real waste containers
-> attacked was enterprise VM sprawl: thousands of VMs idling at 8% CPU.
+> attacked was enterprise VM sprawl: thousands of VMs idling in single-digit CPU
+> utilisation, the figure usually quoted for unvirtualised servers being 7 to 12%.
 
 
 <a id="a--container-vs-virtual-machine"></a>
@@ -296,7 +297,7 @@ LXC could already run a container, but you still had to assemble its filesystem 
 | **A daemon** | a background service managing images, containers, networks, and the API |
 | **A CLI** | `docker run` instead of a page of manual setup |
 
-**Docker still wasn't touching the kernel yet.** It drove LXC until version 0.9 in 2014, when `libcontainer`, written in Go, replaced it. That component is what became `runc`.
+**Docker still wasn't touching the kernel yet.** It drove LXC until version 0.9 in March 2014, when `libcontainer`, written in Go, became the default execution driver and LXC dropped to an optional one. That component is what became `runc`.
 
 > **In short:** containers are an operating-system feature. On Linux that's namespaces + cgroups, and Docker is a very good tool for using them.
 
@@ -890,7 +891,7 @@ Each `RUN` executes in a temporary container whose process is already root, so `
 
 **What separates them is not identity but capabilities.** Linux splits root's power into capability bits, and Docker grants a container only a subset of them:
 
-| Granted by default | Dropped by default |
+| Granted by default | Not granted by default |
 |:--|:--|
 | `CHOWN` `SETUID` `SETGID` `KILL` `NET_BIND_SERVICE` `NET_RAW` `SYS_CHROOT` ... | `SYS_ADMIN` `SYS_MODULE` `SYS_TIME` `SYS_BOOT` ... |
 
@@ -1381,11 +1382,11 @@ $table_prefix = 'wp_';
 
 | | Required by WordPress 7.0.4 | What this project has |
 |:--|:--|:--|
-| **PHP** | 8.3+ recommended, 7.4+ supported | 8.2.33, from Debian 12 |
+| **PHP** | 8.3+ recommended, still runs on 7.4+ | 8.2.33, from Debian 12 |
 | **Database** | MariaDB 10.11+ or MySQL 8.0+ | MariaDB 10.11.18 |
 | **HTTPS** | *"Required for every install."* | nginx, TLSv1.2 and TLSv1.3 |
 
-**Debian 12 ships PHP 8.2, below the recommended 8.3.** That is fine, WordPress documents 7.4 as the supported floor, and the base image is fixed by the subject anyway.
+**Debian 12 ships PHP 8.2, below the recommended 8.3.** That is fine here, WordPress still runs on anything from 7.4 up, and the base image is fixed by the subject anyway. Note that WordPress does not call 7.4 supported: it flags it as end of life and warns it *"may expose your site to security vulnerabilities"*. 8.2 is past that line and still receiving security fixes.
 
 </details>
 
@@ -1703,7 +1704,7 @@ a normal request    browser → nginx → php-fpm → WordPress code → mariadb
 wp-cli                                php CLI → WordPress code → mariadb
 ```
 
-**`--allow-root` is not optional here.** wp-cli refuses to run as UID 0, as a guard against leaving a whole site root-owned. The entrypoint is root, so the flag has to be there.
+**`--allow-root` is not optional here.** wp-cli refuses to run as UID 0 by default, and the reason is not file ownership, it is code execution. Commands like `wp plugin install --activate` run real, third-party PHP during activation hooks, and that code inherits whatever privilege level wp-cli itself is running at. As root, a poorly written or malicious plugin has unrestricted access to the whole system, not just to WordPress's files. The entrypoint has no other user to run as, so the flag has to be there.
 
 </details>
 
