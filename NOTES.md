@@ -1503,7 +1503,7 @@ tools/entrypoint.sh     what happens on every container start
 <br>
 
 <details>
-<summary><b>How the three containers link</b></summary>
+<summary><b>(overview) How the three containers link</b></summary>
 
 <br>
 
@@ -1544,7 +1544,7 @@ reads .css .js .jpg                executes .php
 <br>
 
 <details>
-<summary><b>What the image needs</b></summary>
+<summary><b>(Dockerfile) What the image needs</b></summary>
 
 <br>
 
@@ -1572,7 +1572,7 @@ stream_socket_client(): Unable to connect to ssl://api.wordpress.org:443
 <br>
 
 <details>
-<summary><b>The two Debian defaults that are wrong</b></summary>
+<summary><b>(www.conf, Dockerfile) The two Debian defaults that are wrong</b></summary>
 
 <br>
 
@@ -1605,7 +1605,7 @@ The line is commented out and the built-in default is `yes`, so php-fpm would fo
 <br>
 
 <details>
-<summary><b>Overriding one line, mariadb-style</b></summary>
+<summary><b>(www.conf) Overriding one line, mariadb-style</b></summary>
 
 <br>
 
@@ -1661,7 +1661,7 @@ listen = 0.0.0.0:9000
 <br>
 
 <details>
-<summary><b>WordPress core does not come from apt</b></summary>
+<summary><b>(Dockerfile) WordPress core does not come from apt</b></summary>
 
 <br>
 
@@ -1690,7 +1690,7 @@ Success: WordPress downloaded.
 <br>
 
 <details>
-<summary><b>wp-cli</b></summary>
+<summary><b>(Dockerfile, entrypoint.sh) wp-cli</b></summary>
 
 <br>
 
@@ -1710,7 +1710,7 @@ wp-cli                                php CLI → WordPress code → mariadb
 <br>
 
 <details>
-<summary><b>Build time and run time</b></summary>
+<summary><b>(Dockerfile, entrypoint.sh) Build time and run time</b></summary>
 
 <br>
 
@@ -1735,7 +1735,7 @@ wp-cli                                php CLI → WordPress code → mariadb
 <br>
 
 <details>
-<summary><b>What the entrypoint must do</b></summary>
+<summary><b>(entrypoint.sh) What the entrypoint must do</b></summary>
 
 <br>
 
@@ -1743,6 +1743,14 @@ wp-cli                                php CLI → WordPress code → mariadb
 
 1. **Read the passwords from `/run/secrets/`.** They are files, not environment variables, so nothing in `docker inspect` or `/proc/1/environ` reveals them.
 2. **Wait for mariadb.** Compose's `depends_on` waits for the container to start, not for `mariadbd` to finish its first-boot initialisation. A bounded retry that gives up after a set number of attempts is not an infinite loop.
+
+**Why this step exists:** `depends_on` in compose only waits for the mariadb container to start, not for `mariadbd` to finish its first-boot setup (`mariadb-install-db`, running the init SQL). If wordpress tries to connect too early, it fails.
+
+```bash
+(exec 3<>/dev/tcp/$DB_HOST/3306) 2>/dev/null
+```
+
+**No extra package needed to check it.** `mysql-client` and `netcat` are not installed in the wordpress image, and neither has to be. `/dev/tcp/host/port` is a bash built-in redirection target: it opens a real TCP connection to test reachability, exit code 0 if something is listening, non-zero otherwise. `2>/dev/null` only silences the "Connection refused" message, the exit code still works.
 3. **Guard on `wp-config.php`.** Same shape as `[ ! -d /var/lib/mysql/mysql ]`: first boot configures, every later boot must leave existing content alone.
 4. **First boot only:** `wp config create`, then `wp core install`, then `wp user create` for the second account. The administrator name must not contain `admin` or `administrator` in any form.
 5. **End with `exec "$@"`**, so php-fpm replaces the script and becomes PID 1.
@@ -1752,7 +1760,7 @@ wp-cli                                php CLI → WordPress code → mariadb
 <br>
 
 <details>
-<summary><b>Ownership</b></summary>
+<summary><b>(Dockerfile) Ownership</b></summary>
 
 <br>
 
