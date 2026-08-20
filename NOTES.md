@@ -140,6 +140,12 @@ Three options existed:
 <summary><h2>b · Namespaces, what it sees</h2></summary>
 
 
+> **A namespace is a kernel object that holds one instance of a global system resource.**
+
+**The kernel normally keeps exactly one of each resource:** one process table, one network stack, one mount tree, one hostname. A namespace is another one of those, allocated in kernel memory as a struct with a type and a reference count. A process belongs to a namespace because its `task_struct` points at that object, which § 02 c covers.
+
+**That structure is the definition. The isolation is its consequence:**
+
 > **A namespace gives a process its own private view of one part of the system.**
 
 Instead of one global process list, one global network, one global hostname, the kernel keeps a second copy and hands it to the process. **The process has no way to detect the copy.** It queries the kernel and gets the private view back.
@@ -1531,15 +1537,7 @@ wordpress/
 └── ... ~2500 files
 ```
 
-**Files do not execute themselves, and they do not speak HTTP.** Nothing in that directory listens on a port. Two separate programs are needed around it, and neither one is WordPress:
-
-| Missing capability | Provided by |
-|:--|:--|
-| accept HTTPS requests, serve static files | **nginx** |
-| execute the PHP source | **php-fpm** |
-| store and return the content | **mariadb** |
-
-**That table is the whole three-container architecture.** The subject's split is not arbitrary, it follows what WordPress genuinely is: code that needs an executor in front of it and a database behind it.
+**Files do not execute themselves, and they do not speak HTTP.** Nothing in that directory listens on a port. Everything WordPress cannot do for itself is one of the other two containers, which is the whole architecture:
 
 ```
 browser
@@ -1688,18 +1686,7 @@ php-fpm master        reads config, spawns and reaps workers, holds the socket
 
 **The master never executes PHP.** It supervises. That division is what lets a worker crash on a fatal error without taking the service down, and it is why php-fpm is the process that belongs at PID 1.
 
-<br>
-
-**Two Debian defaults have to be changed for this project.** Measured in a `debian:bookworm` container with `php-fpm` installed:
-
-```
-listen = /run/php/php8.2-fpm.sock     ← a Unix socket, not port 9000
-;daemonize = yes                      ← the default is to background itself
-```
-
-**The Unix socket cannot cross a container boundary.** It is a file in the mount namespace of the wordpress container, so nginx in another container has no path to it. The subject's `fastcgi_pass wordpress:9000` requires a TCP listener, so the pool config becomes `listen = 9000`.
-
-**And the daemonize default would kill the container.** php-fpm backgrounds itself by default, the foreground process exits, and Docker sees PID 1 exit and stops the container. `php-fpm8.2 -F` forces it to stay in the foreground, exactly the § 06 e problem.
+**Debian's defaults for both of those do not suit a container.** § 09 b covers what has to change and why.
 
 </details>
 
@@ -1741,28 +1728,13 @@ tools/entrypoint.sh     what happens on every container start
 <br>
 
 <details>
-<summary><b>(overview) How the three containers link</b></summary>
+<summary><b>(overview) The volume nginx and wordpress share</b></summary>
 
 <br>
 
-**Nothing here talks to anything by accident.** Every arrow below is a different protocol crossing a network namespace boundary:
+**§ 09 a has the request path, browser to nginx to php-fpm to mariadb.** The dependency runs one way only: php-fpm binds 9000 and waits whether or not nginx exists, mariadb binds 3306 and waits whether or not wordpress exists. Nothing calls back upward.
 
-```
-browser
-   │  HTTPS, port 443
-   ▼
-nginx        terminates TLS, serves .css .js .jpg itself
-   │  FastCGI, port 9000
-   ▼
-wordpress    php-fpm executes the .php files
-   │  MySQL protocol, port 3306
-   ▼
-mariadb      stores posts, users, settings
-```
-
-**The dependency runs one way only.** php-fpm binds port 9000 and waits, whether or not nginx exists. mariadb binds 3306 and waits, whether or not wordpress exists. Nothing calls back upward, only the request travels down.
-
-**nginx and wordpress also share a filesystem, not just a network.** This is the part that is easy to miss:
+**What that diagram leaves out is a filesystem shared between two containers:**
 
 ```
               named volume: the WordPress files
@@ -1796,14 +1768,7 @@ reads .css .js .jpg                executes .php
 
 **`json` is not a package.** It has been compiled into PHP since 8.0, so it is already present.
 
-**`ca-certificates` is the one that gets forgotten.** Without it the build dies here:
-
-```
-error:0A000086:SSL routines::certificate verify failed
-stream_socket_client(): Unable to connect to ssl://api.wordpress.org:443
-```
-
-**Many published Dockerfiles never mention it and still work.** They omit `--no-install-recommends`, and `libcurl4` carries `Recommends: ca-certificates`, which apt installs by default. Being explicit means the package list actually describes the image.
+**`ca-certificates` is the one that gets forgotten**, and without it the build dies on `certificate verify failed` when wp-cli reaches `api.wordpress.org`. Many published Dockerfiles never list it and still work, because they omit `--no-install-recommends` and `libcurl4` carries `Recommends: ca-certificates`. See § 06 c.
 
 </details>
 
@@ -1854,45 +1819,22 @@ www.conf     [www]  user=www-data  group=www-data  pm=dynamic ...  listen=/run/p
 www2.conf    [www]  listen=9000
 ```
 
-**Measured: declaring `[www]` twice is not an error.** The master process starts, and whichever file loads *last* wins for any directive it repeats, while everything it does not repeat survives from the other file. Same rule as MariaDB's *"if an option is set multiple times, the later setting will override the earlier setting."* No full pool rewrite is needed, only the one line that is wrong.
+**Measured: declaring `[www]` twice is not an error.** Whichever file loads *last* wins for any directive it repeats, and everything it does not repeat survives from the other file. Same rule as MariaDB's *"if an option is set multiple times, the later setting will override the earlier setting."*
 
-**The header is not optional, even for a one-line override.** A file containing only `listen = 9000`, with no `[www]` above it, fails to start at all:
-
-```
-ERROR: [.../www2.conf:3] unknown entry 'listen'
-ERROR: Unable to include /etc/php/8.2/fpm/pool.d/www2.conf from /etc/php/8.2/fpm/php-fpm.conf
-ERROR: FPM initialization failed
-```
-
-**Without a section header, `listen` belongs to no pool**, and php-fpm has no global `listen` directive to fall back to, so it refuses to start.
+**The `[www]` header is not optional**, even for a one-line file. Without it `listen` belongs to no pool, and php-fpm refuses to start with `unknown entry 'listen'`.
 
 <br>
 
-**"Later" means alphabetically later, and that is easy to get backwards.** Files in `pool.d/` load in filename order, exactly like `mariadb.conf.d/`. The first attempt named the override file `www-listen.conf`, expecting it to load after `www.conf`:
-
-```
-www-listen.conf   ← intended to win
-www.conf          ← the shipped default
-```
-
-**It does the opposite.** In ASCII, `-` (0x2D) sorts before `.` (0x2E), so `www-listen.conf` loads *before* `www.conf`. The shipped file is then the one read last, its Unix-socket `listen` applies, and the override is silently discarded. Confirmed with php-fpm's own config dump:
+**"Later" means alphabetically later, and that is easy to get backwards.** The first attempt named the file `www-listen.conf`, expecting it to load after `www.conf`. It loads before it: in ASCII `-` is 0x2D and `.` is 0x2E. The shipped file was then read last, its Unix-socket `listen` won, and the override was silently discarded:
 
 ```
 $ php-fpm8.2 -tt | grep listen
 listen = /run/php/php8.2-fpm.sock     ← the override never took effect
 ```
 
-**No error anywhere.** `php-fpm -t` reports success and the master process starts normally, because nothing here is invalid, it just resolves to the wrong value. This is the dangerous kind of bug: everything looks fine except the one behaviour that matters.
+**No error anywhere.** `php-fpm -t` reports success and the master starts normally, because nothing is invalid, it just resolves to the wrong value.
 
-**The fix is the filename, not the content.** Name the override so it sorts after `www.conf`:
-
-```ini
-; www2.conf
-[www]
-listen = 0.0.0.0:9000
-```
-
-`www2.conf` follows `www.conf` alphabetically (`2` is 0x32, after `.` at 0x2E), so it loads second and its `listen` is the one that survives.
+**The fix is the filename, not the content.** `www2.conf` sorts after `www.conf` (`2` is 0x32), so it loads second and its `listen = 0.0.0.0:9000` is the one that survives.
 
 </details>
 
@@ -1903,25 +1845,9 @@ listen = 0.0.0.0:9000
 
 <br>
 
-**`apt-get install wordpress` is the wrong instinct.** Debian does package it, but the version is frozen at whatever the release shipped with:
+**`apt-get install wordpress` is the wrong instinct**, for two reasons. The version is frozen at whatever the release shipped with (`6.1.9+dfsg1-0+deb12u1`), and it drags `apache2` plus `libapache2-mod-php8.2` into a container that already has nginx in front of it.
 
-```
-Candidate: 6.1.9+dfsg1-0+deb12u1
-```
-
-**And it drags a second web server into the container:**
-
-```
-apache2   apache2-bin   apache2-data   libapache2-mod-php8.2   ...
-```
-
-**Core is source code, not a package.** It comes from `wordpress.org`, or from wp-cli, which checks the download itself:
-
-```
-Downloading WordPress 7.0.4 (en_US)...
-md5 hash verified: 851346e2e0b6fed73cdd7ce1525d43a7
-Success: WordPress downloaded.
-```
+**Core is source code, not a package.** It comes from `wordpress.org`, or from `wp core download`, which verifies the md5 of the tarball itself.
 
 </details>
 
@@ -1941,7 +1867,7 @@ a normal request    browser → nginx → php-fpm → WordPress code → mariadb
 wp-cli                                php CLI → WordPress code → mariadb
 ```
 
-**`--allow-root` is not optional here.** wp-cli refuses to run as UID 0 by default, and the reason is not file ownership, it is code execution. Commands like `wp plugin install --activate` run real, third-party PHP during activation hooks, and that code inherits whatever privilege level wp-cli itself is running at. As root, a poorly written or malicious plugin has unrestricted access to the whole system, not just to WordPress's files. The entrypoint has no other user to run as, so the flag has to be there.
+**`--allow-root` is not optional here.** wp-cli refuses UID 0 by default, and the reason is code execution, not file ownership: commands like `wp plugin install --activate` run third-party PHP that inherits wp-cli's privileges. The entrypoint has no other user to run as, so the flag has to be there.
 
 </details>
 
@@ -1988,19 +1914,17 @@ wp-cli                                php CLI → WordPress code → mariadb
 | `db_password` | one opaque value, no key, no newline meaning | `DB_PASSWORD=$(cat /run/secrets/db_password)` |
 | `credentials` | `KEY=value` lines: `ADMIN_PASSWORD`, `USER_PASSWORD` | `source /run/secrets/credentials` |
 
-**`cat` gives a string, `source` defines variables.** `$(cat file)` captures the whole file as one value, which is right for a single password. `credentials` is not a value, it is a fragment of shell script, so `source` runs it in the current shell and both variables exist afterwards without ever being written down in the script. That is also why `credentials` must contain nothing but assignments: anything else in it is executed as root.
+**`cat` gives a string, `source` defines variables.** `credentials` is not a value, it is a fragment of shell script, so `source` runs it and both variables exist afterwards. That is also why it must contain nothing but assignments: anything else in it executes as root.
 
-**`db_root_password` is not mounted here.** It belongs to the mariadb service only. A service sees a secret only if it lists it, so wordpress never receives the root password at all.
+**`db_root_password` is not mounted here.** A service sees a secret only if it lists it, so wordpress never receives the root password at all.
 
-2. **Wait for mariadb.** Compose's `depends_on` waits for the container to start, not for `mariadbd` to finish its first-boot initialisation. A bounded retry that gives up after a set number of attempts is not an infinite loop.
-
-**Why this step exists:** `depends_on` in compose only waits for the mariadb container to start, not for `mariadbd` to finish its first-boot setup (`mariadb-install-db`, running the init SQL). If wordpress tries to connect too early, it fails.
+2. **Wait for mariadb.** `depends_on` only waits for the mariadb *container* to start, not for `mariadbd` to finish its first-boot setup (`mariadb-install-db`, then the init SQL). Connecting too early fails. A bounded retry that gives up after a set number of attempts is not an infinite loop.
 
 ```bash
 (exec 3<>/dev/tcp/$DB_HOST/3306) 2>/dev/null
 ```
 
-**No extra package needed to check it.** `mysql-client` and `netcat` are not installed in the wordpress image, and neither has to be. `/dev/tcp/host/port` is a bash built-in redirection target: it opens a real TCP connection to test reachability, exit code 0 if something is listening, non-zero otherwise. `2>/dev/null` only silences the "Connection refused" message, the exit code still works.
+**No extra package needed to check it.** Neither `mysql-client` nor `netcat` is installed, and neither has to be. `/dev/tcp/host/port` is a bash built-in redirection target: it opens a real TCP connection, exit code 0 if something is listening. `2>/dev/null` silences the "Connection refused" message without affecting the exit code.
 
 3. **Guard on `wp-config.php`.** Same shape as `[ ! -d /var/lib/mysql/mysql ]`: first boot configures, every later boot must leave existing content alone.
 
