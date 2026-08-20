@@ -1751,8 +1751,11 @@ wp-cli                                php CLI → WordPress code → mariadb
 ```
 
 **No extra package needed to check it.** `mysql-client` and `netcat` are not installed in the wordpress image, and neither has to be. `/dev/tcp/host/port` is a bash built-in redirection target: it opens a real TCP connection to test reachability, exit code 0 if something is listening, non-zero otherwise. `2>/dev/null` only silences the "Connection refused" message, the exit code still works.
+
 3. **Guard on `wp-config.php`.** Same shape as `[ ! -d /var/lib/mysql/mysql ]`: first boot configures, every later boot must leave existing content alone.
+
 4. **First boot only:** `wp config create`, then `wp core install`, then `wp user create` for the second account. The administrator name must not contain `admin` or `administrator` in any form.
+
 5. **End with `exec "$@"`**, so php-fpm replaces the script and becomes PID 1.
 
 </details>
