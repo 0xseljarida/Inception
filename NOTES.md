@@ -29,10 +29,11 @@
     * [d · COPY and the build context](#d--copy-and-the-build-context)
     * [e · CMD, ENTRYPOINT and PID 1](#e--cmd-entrypoint-and-pid-1)
     * [f · Users and privileges inside a container](#f--users-and-privileges-inside-a-container)
-* [07 · MariaDB](#07--mariadb)
+* [07 · Docker Compose](#07--docker-compose)
+* [08 · MariaDB](#08--mariadb)
     * [a · What MariaDB is](#a--what-mariadb-is)
     * [b · MariaDB, the container](#b--mariadb-the-container)
-* [08 · WordPress](#08--wordpress)
+* [09 · WordPress](#09--wordpress)
     * [a · What WordPress is](#a--what-wordpress-is)
     * [b · The WordPress container](#b--the-wordpress-container)
 
@@ -937,9 +938,159 @@ The kernel knows nothing about the right-hand column. MariaDB knows nothing abou
 
 </details>
 
-<a id="07--mariadb"></a>
+<a id="07--docker-compose"></a>
 <details>
-<summary><h1>07 · MariaDB</h1></summary>
+<summary><h1>07 · Docker Compose</h1></summary>
+
+
+> **Docker Compose is a tool for defining and running multi-container applications.**
+>
+> <sub><i>Docker's own definition</i></sub>
+
+**A Dockerfile builds one image. Nothing in it describes a stack.** It cannot say which containers exist together, which network they share, which volumes persist, or what starts before what. Those are relationships *between* containers, and there is nowhere in a Dockerfile to write them down.
+
+**That gap is what Compose fills:** *"it simplifies the control of your entire application stack, making it easy to manage services, networks, and volumes in a single YAML configuration file."* One file describes the whole system, and *"with a single command, you create and start all the services from your configuration file."*
+
+```
+Dockerfile          how ONE image is built
+docker-compose.yml  how ALL the containers run together
+```
+
+<br>
+
+<details>
+<summary><b>What it replaces</b></summary>
+
+<br>
+
+**Without Compose, this project is three long commands that must be typed in the right order.** Just the mariadb one:
+
+```bash
+docker network create inception
+docker volume create mariadb_data
+docker run -d --name mariadb \
+    --network inception \
+    --env-file srcs/.env \
+    -v mariadb_data:/var/lib/mysql \
+    --restart unless-stopped \
+    my-mariadb
+```
+
+**Every flag is a fact that lives nowhere.** It exists in your shell history, and it has to be retyped identically on the next machine, in the right order, three times over.
+
+```yaml
+services:
+  mariadb:
+    build: ./requirements/mariadb
+    networks: [inception]
+    env_file: [../.env]
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    restart: unless-stopped
+```
+
+**The deeper change is declarative instead of imperative.** `docker run` is an instruction: *do this now*. A Compose file is a description: *this is what should exist*. Compose compares that description against what is actually running and makes up the difference, which is why `docker compose up` on an already-running stack does nothing instead of failing or duplicating.
+
+</details>
+
+<br>
+
+<details>
+<summary><b>The four top-level elements</b></summary>
+
+<br>
+
+**Everything in the file hangs off four keys**, and each one maps to a Docker object that already exists:
+
+```yaml
+services:   the containers, one block each
+networks:   the networks they are attached to
+volumes:    the named volumes that outlive them
+secrets:    files mounted read-only at /run/secrets/
+```
+
+**`services:` is the only mandatory one.** The other three are declarations: a volume or a network listed at the top level is *created*, and a service then opts into it by name. Nothing is shared implicitly, which is exactly the pattern § 09 b describes for secrets, a service sees only what it lists.
+
+**Everything else nests inside a service:** `build`, `image`, `env_file`, `depends_on`, `restart`, `ports`. Those are per-container settings, so they have no meaning at the top level.
+
+</details>
+
+<br>
+
+<details>
+<summary><b>Ignore the <code>version:</code> line in old examples</b></summary>
+
+<br>
+
+**Almost every Compose tutorial online opens with a line that is now obsolete:**
+
+```yaml
+version: "3.8"     # delete this
+```
+
+**It described which schema version the file targeted**, back when the format was versioned 2.0 through 3.8. The Compose Specification replaced that scheme, and Compose *"always uses the most recent schema to validate the Compose file, regardless of the `version` field."*
+
+**Leaving it in is not an error, but it is noise.** Measured with Compose v5.4.0:
+
+```
+WARN: the attribute `version` is obsolete, it will be ignored,
+      please remove it to avoid potential confusion
+```
+
+**The subject fixes the filename as `srcs/docker-compose.yml`.** Docker's own documentation has moved to `compose.yaml`, and both names are still found. If both files exist in one directory, `compose.yaml` wins and Compose warns that it found several.
+
+</details>
+
+<br>
+
+<details>
+<summary><b>Compose is a client, not a second engine</b></summary>
+
+<br>
+
+**Compose creates nothing itself.** It parses the YAML, works out which containers, networks and volumes should exist, and then sends ordinary requests to the same API from § 05:
+
+```
+docker compose up
+      │  reads docker-compose.yml
+      │  decides what should exist
+      ▼
+  dockerd            same REST API, same socket
+      ▼
+ containerd
+      ▼
+   runc
+      ▼
+Linux kernel
+```
+
+**So nothing new happens at the bottom.** A container started by Compose is indistinguishable from one started by `docker run`, and `docker ps` lists them side by side. Compose only removes the typing, it does not add a layer of isolation or a new kind of object.
+
+</details>
+
+<br>
+
+<details>
+<summary><b><code>docker compose</code>, not <code>docker-compose</code></b></summary>
+
+<br>
+
+**The hyphen marks the old implementation.** Compose V1 was a separate Python program invoked as `docker-compose`. V2 rewrote it in Go as a plugin to the `docker` CLI, invoked as a subcommand:
+
+```
+docker-compose    V1, Python, separate binary, no longer maintained
+docker compose    V2 onward, Go, a plugin of the docker CLI
+```
+
+**This machine runs Compose v5.4.0 with Docker 29.7.2**, so the space is the correct form. The hyphenated command may not exist at all, and any tutorial still using it predates the current format, which is usually also why it carries the obsolete `version:` line.
+
+</details>
+
+</details>
+
+<a id="08--mariadb"></a>
+<details>
+<summary><h1>08 · MariaDB</h1></summary>
 
 
 <p align="center"><img src="assets/mariadb_image.png" width="400"></p>
@@ -1251,9 +1402,9 @@ PID 1, runs the SQL, then serves    PID 1, serves
 
 </details>
 
-<a id="08--wordpress"></a>
+<a id="09--wordpress"></a>
 <details>
-<summary><h1>08 · WordPress</h1></summary>
+<summary><h1>09 · WordPress</h1></summary>
 
 
 <p align="center"><img src="assets/wordpress_images.png" width="300"></p>
@@ -1493,7 +1644,7 @@ MySQL       ──acquired──►   MariaDB     (2009)
 <summary><h2>b · The WordPress container</h2></summary>
 
 
-**Three files build this service**, the same split as § 07 b:
+**Three files build this service**, the same split as § 08 b:
 
 ```
 Dockerfile              how the image is built
@@ -1610,7 +1761,7 @@ The line is commented out and the built-in default is `yes`, so php-fpm would fo
 
 <br>
 
-**`pool.d/` behaves like `mariadb.conf.d/` from § 07 b.** Every `*.conf` file in it is included, and two files can declare the same pool name. So instead of replacing the whole shipped `www.conf`, a second file can carry just the one directive that is wrong:
+**`pool.d/` behaves like `mariadb.conf.d/` from § 08 b.** Every `*.conf` file in it is included, and two files can declare the same pool name. So instead of replacing the whole shipped `www.conf`, a second file can carry just the one directive that is wrong:
 
 ```
 www.conf     [www]  user=www-data  group=www-data  pm=dynamic ...  listen=/run/php/...sock
@@ -1740,7 +1891,7 @@ wp-cli                                php CLI → WordPress code → mariadb
 
 <br>
 
-**Same reasoning as § 07 b.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
+**Same reasoning as § 08 b.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
 
 1. **Read the passwords from `/run/secrets/`.** They are files, not environment variables, so nothing in `docker inspect` or `/proc/1/environ` reveals them.
 2. **Wait for mariadb.** Compose's `depends_on` waits for the container to start, not for `mariadbd` to finish its first-boot initialisation. A bounded retry that gives up after a set number of attempts is not an infinite loop.
