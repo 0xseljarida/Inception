@@ -1063,6 +1063,32 @@ docker-compose.yml
 | `command` | overrides the image's `CMD` |
 | `entrypoint` | overrides the image's `ENTRYPOINT` |
 
+**Under a top-level block, every key is a name.** This is the part that is easy to get wrong with `secrets:`, because the word appears twice and means something different each time:
+
+```yaml
+secrets:                                       # declare, once
+  db_password:                                 # ← the NAME of a secret
+    file: ../secrets/db_password.txt           # ← where its content comes from
+  db_root_password:
+    file: ../secrets/db_root_password.txt
+  credentials:
+    file: ../secrets/credentials.txt
+
+services:
+  wordpress:
+    secrets: [db_password, credentials]        # attach, by name
+```
+
+**The name decides the path, the filename does not.** `file:` is only a host path that Compose reads. What the container sees is `/run/secrets/<name>`, and the `.txt` never appears:
+
+```text
+name in compose        file on host                      path in container
+db_password      ←──   ../secrets/db_password.txt   ──→  /run/secrets/db_password
+credentials      ←──   ../secrets/credentials.txt   ──→  /run/secrets/credentials
+```
+
+**So the names are fixed by the scripts, not by taste.** Both entrypoints already read `/run/secrets/db_password` and `/run/secrets/credentials`. Renaming the file on the host changes nothing, renaming the key breaks both scripts.
+
 **Two of these carry the project's hard constraints.** `driver_opts` under a top-level volume is what pins a named volume to `/home/sel-jari/data/` (`type: none`, `o: bind`, `device:` an absolute host path), and a user-defined network is what provides DNS at all:
 
 > Containers on the default bridge network can only access each other by IP addresses, unless you use the `--link` option, which is considered legacy.
@@ -1954,6 +1980,18 @@ wp-cli                                php CLI → WordPress code → mariadb
 **Same reasoning as § 08 b.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
 
 1. **Read the passwords from `/run/secrets/`.** They are files, not environment variables, so nothing in `docker inspect` or `/proc/1/environ` reveals them.
+
+**Three secret files, read in two different ways.** The wordpress container needs the database password *and* the two WordPress account passwords, and they are not shaped the same:
+
+| File | Contains | Read with |
+|:--|:--|:--|
+| `db_password` | one opaque value, no key, no newline meaning | `DB_PASSWORD=$(cat /run/secrets/db_password)` |
+| `credentials` | `KEY=value` lines: `ADMIN_PASSWORD`, `USER_PASSWORD` | `source /run/secrets/credentials` |
+
+**`cat` gives a string, `source` defines variables.** `$(cat file)` captures the whole file as one value, which is right for a single password. `credentials` is not a value, it is a fragment of shell script, so `source` runs it in the current shell and both variables exist afterwards without ever being written down in the script. That is also why `credentials` must contain nothing but assignments: anything else in it is executed as root.
+
+**`db_root_password` is not mounted here.** It belongs to the mariadb service only. A service sees a secret only if it lists it, so wordpress never receives the root password at all.
+
 2. **Wait for mariadb.** Compose's `depends_on` waits for the container to start, not for `mariadbd` to finish its first-boot initialisation. A bounded retry that gives up after a set number of attempts is not an infinite loop.
 
 **Why this step exists:** `depends_on` in compose only waits for the mariadb container to start, not for `mariadbd` to finish its first-boot setup (`mariadb-install-db`, running the init SQL). If wordpress tries to connect too early, it fails.
