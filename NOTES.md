@@ -39,6 +39,7 @@
 * [10 · Volumes](#10--volumes)
     * [a · Why containers need them](#a--why-containers-need-them)
     * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
+    * [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
 
 ---
 
@@ -734,7 +735,22 @@ So the example above is **4 instructions but 3 layers**. This is where the layer
 FROM debian:bookworm
 ```
 
-**Never `debian:latest`.** The subject forbids it and asks for the penultimate stable release:
+**Never `debian:latest`.** The subject fixes both halves of this line:
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> For performance reasons, the containers must be built either from the penultimate stable version of Alpine or Debian. The choice is yours.
+>
+> The latest tag is prohibited.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**Penultimate means one release behind current stable:**
 
 ```
 Debian 13 · trixie     current stable
@@ -872,7 +888,24 @@ php-fpm   -F
 mysqld    (already foreground)
 ```
 
-> ⚠️ **The subject bans `tail -f`, `sleep infinity`, `while true` and bare `bash` as PID 1.** Each one is a fake process holding the container open while the real service runs behind it, or not at all. Instant fail at defense.
+**The subject bans the workarounds by name, twice:**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> A Docker container is not a virtual machine. Thus, it is not recommended to use any hacky patches based on 'tail -f' and similar methods when trying to run it. Read about how daemons work and whether it's a good idea to use them or not.
+>
+> Your containers must not be started with a command running an infinite loop. Thus, this also applies to any command used as entrypoint, or used in entrypoint scripts. The following are a few prohibited hacky patches: tail -f, bash, sleep infinity, while true.
+>
+> Read about PID 1 and the best practices for writing Dockerfiles.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**Each one is a fake process** holding the container open while the real service runs behind it, or not at all. Note the second quote reaches into entrypoint scripts, not just the `CMD`.
 
 </details>
 
@@ -1098,6 +1131,23 @@ credentials      ←──   ../secrets/credentials.txt   ──→  /run/secret
 
 **So the names are fixed by the scripts, not by taste.** Both entrypoints already read `/run/secrets/db_password` and `/run/secrets/credentials`. Renaming the file on the host changes nothing, renaming the key breaks both scripts.
 
+**Why secrets rather than `.env` for these three.** The subject splits the two deliberately, and attaches the harshest penalty in the document to getting it wrong:
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> No password must be present in your Dockerfiles.
+>
+> It is mandatory to use environment variables. Also, it is mandatory to use a .env file to store environment variables. It is strongly recommended that you use Docker secrets to store any confidential information. Any credentials, API keys, or passwords found in your Git repository (outside of properly configured secrets) will result in project failure.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**Both are mandatory, for different data.** `.env` is required and holds non-secret configuration such as `DOMAIN_NAME` and `MYSQL_USER`, which the subject's own example `.env` shows. Passwords go through `secrets:`, and `secrets/` is gitignored.
+
 **Two of these carry the project's hard constraints.** `driver_opts` under a top-level volume is what pins a named volume to `/home/sel-jari/data/` (`type: none`, `o: bind`, `device:` an absolute host path), and a user-defined network is what provides DNS at all:
 
 > Containers on the default bridge network can only access each other by IP addresses, unless you use the `--link` option, which is considered legacy.
@@ -1106,7 +1156,31 @@ credentials      ←──   ../secrets/credentials.txt   ──→  /run/secret
 >
 > <sub><i>Docker, bridge network driver</i></sub>
 
-**That second sentence is why `DB_HOST=mariadb` resolves** inside the WordPress entrypoint, and why the subject can forbid `--link` without leaving the containers unable to find each other.
+**That second sentence is why `DB_HOST=mariadb` resolves** inside the WordPress entrypoint, and why the subject can forbid the alternatives without leaving the containers unable to find each other:
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> Of course, using network: host or --link or links: is forbidden. The network line must be present in your docker-compose.yml file.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**And the restart policy is a requirement, not a preference:**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> Your containers have to restart in case of a crash.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
 
 </details>
 
@@ -1132,7 +1206,26 @@ WARN: the attribute `version` is obsolete, it will be ignored,
       please remove it to avoid potential confusion
 ```
 
-**The subject fixes the filename as `srcs/docker-compose.yml`.** Docker's own documentation has moved to `compose.yaml`, and both names are still found. If both files exist in one directory, `compose.yaml` wins and Compose warns that it found several.
+**The subject fixes the filename as `srcs/docker-compose.yml`**, and fixes who calls it:
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> All the files required for the configuration of your project must be placed in a srcs folder.
+>
+> A Makefile is also required and must be located at the root of your directory. It must set up your entire application (i.e., it has to build the Docker images using docker-compose.yml).
+>
+> You also have to write your own Dockerfiles, one per service. The Dockerfiles must be called in your docker-compose.yml by your Makefile.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**So the chain is fixed in one direction:** `make` calls Compose, Compose calls the Dockerfiles. Nothing is built by hand.
+
+Docker's own documentation has moved to `compose.yaml`, and both names are still found. If both files exist in one directory, `compose.yaml` wins and Compose warns that it found several.
 
 </details>
 
@@ -1413,7 +1506,20 @@ fi
 exec mariadbd --user=mysql
 ```
 
-**Why a script exists at all.** The subject forbids pre-built images and forbids passwords in the Dockerfile. A `RUN` instruction finishes at build time, long before any daemon exists, and the volume mounts over `/var/lib/mysql` only at run time. So the database, the account and the passwords can only be created when the container starts.
+**Why a script exists at all.** Pulling `mariadb` from Docker Hub would do all of this for you, and that is exactly what is forbidden:
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> This means you have to build the Docker images of your project yourself. It is then forbidden to pull ready-made Docker images, as well as using services such as DockerHub (Alpine/Debian being excluded from this rule).
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**So the initialisation has to be written by hand, and it has to happen at run time.** A `RUN` finishes at build time, long before any daemon exists, and the volume mounts over `/var/lib/mysql` only when the container starts. The database, the account and the passwords can only be created then.
 
 **`mkdir -p /run/mysqld`, because there is no init system.** On a real Debian machine `systemd-tmpfiles` recreates that directory at every boot, since `/run` is a tmpfs and no package may ship files there. A container has no systemd, so nothing does it, and `mariadbd` aborts with *"Can't start server : Bind on unix socket"*.
 
@@ -1555,7 +1661,35 @@ php-fpm            executes the WordPress PHP code
 mariadb            stores the content
 ```
 
-**The container named `wordpress` is really php-fpm plus the WordPress files.** That is why the subject forbids nginx inside it: the executor and the web server are two different jobs, in two different containers.
+**The container named `wordpress` is really php-fpm plus the WordPress files.** The subject spells out the separation, service by service:
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> • A Docker container that contains NGINX with TLSv1.2 or TLSv1.3 only.
+>
+> • A Docker container that contains WordPress + php-fpm (it must be installed and configured) only, without nginx.
+>
+> • A Docker container that contains MariaDB only, without nginx.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**"Without nginx" appears twice on purpose.** The executor and the web server are two different jobs, so they are two different containers. The same list also fixes nginx as the only way in:
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> Your NGINX container must be the only entrypoint into your infrastructure via the port 443 only, using the TLSv1.2 or TLSv1.3 protocol.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
 
 </details>
 
@@ -1931,7 +2065,22 @@ wp-cli                                php CLI → WordPress code → mariadb
 
 3. **Guard on `wp-config.php`.** Same shape as `[ ! -d /var/lib/mysql/mysql ]`: first boot configures, every later boot must leave existing content alone.
 
-4. **First boot only:** `wp config create`, then `wp core install`, then `wp user create` for the second account. The administrator name must not contain `admin` or `administrator` in any form.
+4. **First boot only:** `wp config create`, then `wp core install`, then `wp user create` for the second account.
+
+**Two accounts, and one of them has a naming rule:**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> In your WordPress database, there must be two users, one of them being the administrator. The administrator's username can't contain admin/Admin or administrator/Administrator (e.g., admin, administrator, Administrator, admin-123, and so forth).
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**"Contain" is the operative word**, so `admin-123` and `wpadmin` both fail, not only the exact word. `wp core install --admin_user=` creates the first account, `wp user create` the second.
 
 5. **End with `exec "$@"`**, so php-fpm replaces the script and becomes PID 1.
 
@@ -2033,7 +2182,58 @@ $ docker volume create probe_tmp && docker volume inspect probe_tmp
 
 **Copy-up is the behaviour that matters for wordpress.** Mounting an *empty* named volume over a directory that already has files in the image copies those files into the volume. A bind mount never does this, it simply hides whatever was underneath. That is why `wp core download` can run at build time and the files still reach the volume, which § 09 b covers.
 
-**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/sel-jari/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and `driver_opts` is what satisfies both.
+**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/sel-jari/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and § 10 c is how both are satisfied.
+
+</details>
+
+<a id="c--driver_opts-satisfying-both-rules"></a>
+<details>
+<summary><h2>c · <code>driver_opts</code>, satisfying both rules</h2></summary>
+
+
+**The subject states both requirements in the same list:**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> • A volume that contains your WordPress database.
+>
+> • A second volume that contains your WordPress website files.
+>
+> • **You must use Docker named volumes** for these two persistent storages. Bind mounts are not allowed for these volumes.
+>
+> • **Both named volumes must store their data inside `/home/login/data`** on the host machine.
+>
+> <sub><i>the subject, and later: "Your volumes will be available in the /home/login/data folder of the host machine using Docker."</i></sub>
+
+</details>
+
+**Named, but not where Docker names them.** `driver_opts` passes options to the volume driver, and the `local` driver accepts the three that redirect its storage:
+
+```yaml
+volumes:
+  mariadb_volume:
+    driver_opts:
+      type: none                              no filesystem to create, pass through
+      o: bind                                 mount it as a bind
+      device: /home/sel-jari/data/mariadb     the host directory to use
+```
+
+**It is still a named volume.** `docker volume ls` lists it, `docker volume rm` removes it, and copy-up still applies. Only the location changed.
+
+**The directory must already exist.** `type: none` creates nothing. Measured:
+
+```
+failed to mount local volume:
+  mount /home/sel-jari/data/does-not-exist:/var/lib/docker/volumes/..._data
+  no such file or directory
+```
+
+The container never starts, and the directory is still missing afterwards. So the Makefile has to run `mkdir -p` before `docker compose up`.
+
+**One device per volume.** Two volumes pointing at the same `device` is one directory with two names, and mariadb's tables would land beside WordPress's PHP files, in a directory nginx serves over HTTP.
 
 </details>
 
