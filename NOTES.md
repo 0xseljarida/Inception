@@ -38,6 +38,7 @@
     * [b · The WordPress container](#b--the-wordpress-container)
 * [10 · nginx](#10--nginx)
     * [a · What nginx is](#a--what-nginx-is)
+    * [b · The configuration files](#b--the-configuration-files)
 * [11 · Volumes](#11--volumes)
     * [a · Why containers need them](#a--why-containers-need-them)
     * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
@@ -2160,11 +2161,71 @@ browser ──HTTPS 443──► nginx ──┬── static files from the vol
 <details>
 <summary><b>Proof from the subject</b></summary>
 
+<br>
+
 > A Docker container that contains NGINX with TLSv1.2 or TLSv1.3 only.
 >
 > Your NGINX container must be the only entrypoint into your infrastructure via the port 443 only, using the TLSv1.2 or TLSv1.3 protocol.
+>
+> <sub><i>the subject</i></sub>
 
 </details>
+
+</details>
+
+<a id="b--the-configuration-files"></a>
+<details>
+<summary><h2>b · The configuration files</h2></summary>
+
+
+**nginx reads exactly one file: `/etc/nginx/nginx.conf`.** Every other file it uses is pulled in because that one names it. There is no directory the daemon scans on its own.
+
+**The file is a tree of contexts.** A context is a block that scopes directives, and a directive is only legal inside certain contexts:
+
+```text
+main            user, worker_processes, pid        ← no braces, the file itself
+├── events {}   how workers accept connections
+└── http {}     everything HTTP
+    └── server {}      one virtual host
+        └── location {}    one URL path
+```
+
+**Settings inherit downward** unless the inner context redefines them. That is why an `ssl_protocols` written once in `http` applies to every `server` block underneath it.
+
+**`include` is textual insertion at the point where it appears**, and the nginx documentation gives its context as `any`. Debian's `nginx.conf` uses it twice, both times *inside* `http`:
+
+```nginx
+include /etc/nginx/conf.d/*.conf;
+include /etc/nginx/sites-enabled/*;
+```
+
+**So an included file may only contain http-level directives**, which in practice means `server` blocks. That is why a site file starts directly with `server {` and never repeats `http {`.
+
+<br>
+
+**`conf.d` and `sites-enabled` are the same thing to nginx.** The split is a Debian packaging convention, not an nginx feature:
+
+```text
+sites-available/   every site you have written
+sites-enabled/     symlinks to the ones currently active   ← enable = ln -s, disable = rm
+conf.d/            fragments that are always on
+```
+
+**nginx reads both, in that order, and merges the `server` blocks into one list.** Selection then happens per request: `listen` first, then the `Host` header against `server_name`, with unmatched requests going to that port's default server.
+
+**Two things in the packaged file matter directly here:**
+
+- `ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;` the default permits two protocols the subject forbids. The `server` block must redefine it.
+- `include /etc/nginx/sites-enabled/*;` picks up `default`, which owns port 80. Deleting that symlink is what removes it.
+
+**Duplicating a directive in one context is fatal, not a silent override.** Measured on the `nginx` 1.22.1-9+deb12u9 package:
+
+```
+"root" directive is duplicate in /etc/nginx/conf.d/a.conf:1
+nginx: configuration file /etc/nginx/nginx.conf test failed
+```
+
+**That is the opposite of `mariadb.conf.d/` and php-fpm's `pool.d/`**, § 08 b and § 09 b, where the later file quietly wins. Here two `server` blocks coexist and are chosen by address, while two identical directives in one block refuse to start.
 
 </details>
 
