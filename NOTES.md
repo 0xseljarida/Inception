@@ -2296,7 +2296,7 @@ $ docker volume create probe_tmp && docker volume inspect probe_tmp
 
 **Copy-up is the behaviour that matters for wordpress.** Mounting an *empty* named volume over a directory that already has files in the image copies those files into the volume. A bind mount never does this, it simply hides whatever was underneath. That is why `wp core download` can run at build time and the files still reach the volume, which § 09 b covers.
 
-**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/sel-jari/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and § 10 c is how both are satisfied.
+**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/sel-jari/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and § 11 c is how both are satisfied.
 
 </details>
 
