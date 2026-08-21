@@ -2162,9 +2162,7 @@ browser ──HTTPS 443──► nginx ──┬── static files from the vol
 
 > A Docker container that contains NGINX with TLSv1.2 or TLSv1.3 only.
 >
-> Your container must not be accessible via a different way than port 443.
->
-> The NGINX container must be the only entrypoint into your infrastructure via the port 443 only, using the TLSv1.2 or TLSv1.3 protocol.
+> Your NGINX container must be the only entrypoint into your infrastructure via the port 443 only, using the TLSv1.2 or TLSv1.3 protocol.
 
 </details>
 
