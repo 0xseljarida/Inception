@@ -36,7 +36,9 @@
 * [09 · WordPress](#09--wordpress)
     * [a · What WordPress is](#a--what-wordpress-is)
     * [b · The WordPress container](#b--the-wordpress-container)
-* [10 · Volumes](#10--volumes)
+* [10 · nginx](#10--nginx)
+    * [a · What nginx is](#a--what-nginx-is)
+* [11 · Volumes](#11--volumes)
     * [a · Why containers need them](#a--why-containers-need-them)
     * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
     * [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
@@ -2117,9 +2119,62 @@ chown -R www-data:www-data /var/www/html
 
 </details>
 
-<a id="10--volumes"></a>
+<a id="10--nginx"></a>
 <details>
-<summary><h1>10 · Volumes</h1></summary>
+<summary><h1>10 · nginx</h1></summary>
+
+
+<a id="a--what-nginx-is"></a>
+<details>
+<summary><h2>a · What nginx is</h2></summary>
+
+
+> **nginx is a web server: a daemon that listens on a TCP port, speaks HTTP, and answers each request either with a file from disk or with a response produced by another program.**
+
+**A web server exists because a browser cannot read a disk.** The browser only knows how to open a TCP connection and send an HTTP request. Something on the other side has to accept that connection, parse the request, decide what the requested path means, and write an HTTP response back. That is the whole job.
+
+**nginx answers a request in one of two ways.** Either the path maps to a file it can read and send as is, or the path maps to something it cannot produce itself, in which case it forwards the request to a process that can, and relays the answer:
+
+```
+GET /style.css   ──►  nginx reads the file           ──►  200 + bytes
+GET /index.php   ──►  nginx cannot execute PHP
+                      forwards to php-fpm            ──►  200 + generated HTML
+```
+
+**The second case is why the WordPress container exists.** As § 09 says, php-fpm executes PHP but does not speak HTTP, and nginx speaks HTTP but cannot execute PHP. Neither is a complete website on its own.
+
+<br>
+
+**In this project nginx has one more job: it is the only door.**
+
+```
+browser ──HTTPS 443──► nginx ──┬── static files from the volume
+                               │
+                               └── FastCGI 9000 ──► wordpress ──► mariadb
+```
+
+**Only nginx has a published port.** Everything else is reachable by container name inside the Docker network and by nothing on the host, which is what the subject means by a single entrypoint.
+
+**nginx also terminates TLS.** The encrypted connection ends at nginx: it holds the certificate and the private key, decrypts the request, and everything it forwards afterwards travels as plain traffic inside the private network. WordPress and MariaDB never handle a certificate.
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+> A Docker container that contains NGINX with TLSv1.2 or TLSv1.3 only.
+>
+> Your container must not be accessible via a different way than port 443.
+>
+> The NGINX container must be the only entrypoint into your infrastructure via the port 443 only, using the TLSv1.2 or TLSv1.3 protocol.
+
+</details>
+
+</details>
+
+</details>
+
+<a id="11--volumes"></a>
+<details>
+<summary><h1>11 · Volumes</h1></summary>
 
 
 <a id="a--why-containers-need-them"></a>
