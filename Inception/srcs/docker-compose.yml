@@ -1,0 +1,42 @@
+services:
+  mariadb:
+    build: ./requirements/mariadb
+    networks: [inception]
+    env_file: [./.env]
+    restart: unless-stopped
+    secrets: [db_password, db_root_password]
+    volumes:
+      - mariadb_volume:/var/lib/mysql
+
+  wordpress:
+    build: ./requirements/wordpress
+    networks: [inception]
+    env_file: [./.env]
+    restart: unless-stopped
+    secrets: [credentials, db_password]
+    volumes:
+      - wordpress_volume:/var/www/html
+
+secrets:
+    db_password:
+      file: ../secrets/db_password.txt
+    db_root_password:
+      file: ../secrets/db_root_password.txt
+    credentials:
+      file: ../secrets/credentials.txt
+
+networks:
+  inception:
+
+volumes:
+  mariadb_volume:
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/sel-jari/data/mariadb
+
+  wordpress_volume:
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/sel-jari/data/wordpress
