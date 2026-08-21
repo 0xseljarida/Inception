@@ -36,6 +36,9 @@
 * [09 · WordPress](#09--wordpress)
     * [a · What WordPress is](#a--what-wordpress-is)
     * [b · The WordPress container](#b--the-wordpress-container)
+* [10 · Volumes](#10--volumes)
+    * [a · Why containers need them](#a--why-containers-need-them)
+    * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
 
 ---
 
@@ -1960,6 +1963,77 @@ chown -R www-data:www-data /var/www/html
 **UID 33 then appears on the host.** As § 06 f says, UIDs cross the boundary unchanged, and copy-up preserves them, so `ls -l /home/sel-jari/data/wordpress` shows UID 33 rather than `sel-jari`. That is correct, not a bug.
 
 </details>
+
+</details>
+
+</details>
+
+<a id="10--volumes"></a>
+<details>
+<summary><h1>10 · Volumes</h1></summary>
+
+
+<a id="a--why-containers-need-them"></a>
+<details>
+<summary><h2>a · Why containers need them</h2></summary>
+
+
+> **A volume is a directory on the host that Docker mounts into a container, so the data written there survives the container.**
+
+**A container's filesystem dies with the container.** Remove the mariadb container and every table goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 c explains why. The writable layer belongs to the container, so it is destroyed with it.
+
+**Databases and uploaded media are the exception.** They are the one thing that must outlive the process that wrote them.
+
+**A volume solves that by pointing part of the container's filesystem somewhere else.** Writes to that path go through to the host disk instead of into the writable layer:
+
+```
+container                        host
+/var/lib/mysql   ───────────────► a real directory on the disk
+                                  survives docker rm, survives a rebuild
+```
+
+**Nothing inside the container can tell the difference.** `mariadbd` opens `/var/lib/mysql` exactly as it would on a normal machine. The redirection happens in the mount namespace, § 02 b, before the process ever sees the path.
+
+**This project needs two of them:**
+
+```
+mariadb     /var/lib/mysql     the tables
+wordpress   /var/www/html      the PHP files and wp-content/uploads
+```
+
+</details>
+
+<a id="b--named-volumes-and-bind-mounts"></a>
+<details>
+<summary><h2>b · Named volumes and bind mounts</h2></summary>
+
+
+**There are two ways to say "mount something from the host", and Docker treats them differently:**
+
+```yaml
+volumes:
+  - /home/sel-jari/data/mariadb:/var/lib/mysql   ← bind mount
+  - mariadb_data:/var/lib/mysql                  ← named volume
+```
+
+| | Named volume | Bind mount |
+|:--|:--|:--|
+| **who chooses the host path** | Docker | you |
+| **default location** | `/var/lib/docker/volumes/<name>/_data` | wherever you point it |
+| **listed by `docker volume ls`** | yes | no |
+| **exists as an object** | yes, with a name and a driver | no, it is only a path |
+| **copy-up on first mount** | yes | no |
+
+**Measured on this machine:**
+
+```
+$ docker volume create probe_tmp && docker volume inspect probe_tmp
+/var/lib/docker/volumes/probe_tmp/_data | driver=local
+```
+
+**Copy-up is the behaviour that matters for wordpress.** Mounting an *empty* named volume over a directory that already has files in the image copies those files into the volume. A bind mount never does this, it simply hides whatever was underneath. That is why `wp core download` can run at build time and the files still reach the volume, which § 09 b covers.
+
+**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/sel-jari/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and `driver_opts` is what satisfies both.
 
 </details>
 
