@@ -46,6 +46,12 @@
     * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
     * [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
 * [12 · The Makefile](#12--the-makefile)
+* [13 · Bonus](#13--bonus)
+    * [a · redis cache](#a--redis-cache)
+    * [b · FTP server](#b--ftp-server)
+    * [c · A static website](#c--a-static-website)
+    * [d · Adminer](#d--adminer)
+    * [e · The service of my choice](#e--the-service-of-my-choice)
 
 ---
 
@@ -2754,5 +2760,101 @@ fclean   the above, plus the volumes and the host data  (down -v)
 **`fclean` is also the only place `sudo` is justified.** The files under `data/` were written by the container processes after they dropped privileges, so they are owned by UID 999 (`mysql`) and UID 33 (`www-data`), as § 06 f explains. Your own account cannot delete them.
 
 **No `sudo` anywhere else.** Being in the `docker` group is already enough to reach the socket, and `sudo mkdir` would create the data directories owned by root.
+
+</details>
+
+<a id="13--bonus"></a>
+<details>
+<summary><h1>13 · Bonus</h1></summary>
+
+
+> **The bonus part is five extra services, each one an additional container built from its own Dockerfile.**
+
+**The bonus is only looked at once the mandatory part is perfect.** A single flaw in the three mandatory containers and the bonus is not evaluated at all, so nothing here is worth starting before the mandatory stack is finished and documented.
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> The bonus part will only be assessed if the mandatory part is completed perfectly. Perfect means the mandatory part has been fully completed and functions without any malfunctions. If you have not passed ALL the mandatory requirements, your bonus part will not be evaluated at all.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**Each bonus service is worth one point, and each one follows the same pattern already used three times:** a directory under `srcs/requirements/`, one Dockerfile on the same Debian base, a real foreground daemon as PID 1, a service in `docker-compose.yml` on the `inception` network, and a named volume only if it has state to keep.
+
+```text
+srcs/requirements/
+├── mariadb/        mandatory
+├── wordpress/      mandatory
+├── nginx/          mandatory
+└── bonus/
+    ├── redis/
+    ├── ftp/
+    ├── static/
+    └── adminer/
+```
+
+<br>
+
+
+<a id="a--redis-cache"></a>
+<details>
+<summary><h2>a · redis cache</h2></summary>
+
+
+**To be written.**
+
+</details>
+
+---
+
+
+<a id="b--ftp-server"></a>
+<details>
+<summary><h2>b · FTP server</h2></summary>
+
+
+**To be written.**
+
+</details>
+
+---
+
+
+<a id="c--a-static-website"></a>
+<details>
+<summary><h2>c · A static website</h2></summary>
+
+
+**To be written.**
+
+</details>
+
+---
+
+
+<a id="d--adminer"></a>
+<details>
+<summary><h2>d · Adminer</h2></summary>
+
+
+**To be written.**
+
+</details>
+
+---
+
+
+<a id="e--the-service-of-my-choice"></a>
+<details>
+<summary><h2>e · The service of my choice</h2></summary>
+
+
+**To be written.**
+
+</details>
 
 </details>
