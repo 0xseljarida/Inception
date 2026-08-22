@@ -2797,7 +2797,15 @@ srcs/requirements/
     └── ftp/
 ```
 
-**The order below is my build order, easiest first.** The static site has no state and no dependency, Adminer reuses the php-fpm knowledge from § 09, redis only becomes work on the WordPress side where the cache plugin has to be configured, and the FTP server is the fiddly one: passive port range, chroot, and a user that maps onto the WordPress volume with the right ownership.
+**The order below is my build order, easiest first, not the order the subject lists them in.**
+
+| Container | Time | What makes it that |
+|:--|:--|:--|
+| **static site** | 30 to 60 min | one nginx, or any non-PHP server, on its own port. A few HTML and CSS files, no state, no secrets |
+| **adminer** | 1 to 2 h | one PHP file to download, and the php-fpm knowledge from § 09 reused as is. The only new decision is whether it gets its own nginx or a `location` in the existing one |
+| **redis** | 2 to 3 h | `redis-server` in the foreground is trivial. The work is on the WordPress side, installing and configuring the object cache plugin so it actually connects |
+| **ftp** | 3 to 5 h | vsftpd is fiddly: passive port range, `pasv_address`, `nopriv_user`, chroot, and an FTP user that maps onto the WordPress volume with the right ownership |
+| **free choice** | varies | cheapest is a small monitoring or exporter service. Whatever it is, it has to be justified in one sentence at the defense |
 
 <br>
 
