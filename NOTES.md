@@ -40,10 +40,12 @@
     * [a · What nginx is](#a--what-nginx-is)
     * [b · The configuration files](#b--the-configuration-files)
     * [c · TLS and the certificate](#c--tls-and-the-certificate)
+    * [d · The nginx container](#d--the-nginx-container)
 * [11 · Volumes](#11--volumes)
     * [a · Why containers need them](#a--why-containers-need-them)
     * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
     * [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
+* [12 · The Makefile](#12--the-makefile)
 
 ---
 
@@ -2378,6 +2380,197 @@ The extension is convention only. nginx decides what a file is by which directiv
 </details>
 
 </details>
+
+<a id="d--the-nginx-container"></a>
+<details>
+<summary><h2>d · The nginx container</h2></summary>
+
+
+**Two files build this service**, one fewer than the other two, because nothing here needs to happen at run time:
+
+```
+Dockerfile           how the image is built, certificate included
+conf/default.conf    the one server block
+```
+
+**There is no entrypoint script, no secret, and no `.env`.** nginx holds no state, has no first boot to guard, and needs no password. Everything it requires is decided at build time, which is why `ENTRYPOINT` can be the daemon itself.
+
+<br>
+
+<details>
+<summary><b>(Dockerfile) Three things, in cache order</b></summary>
+
+<br>
+
+```dockerfile
+FROM debian:bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nginx openssl \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm /etc/nginx/sites-enabled/default
+
+RUN mkdir -p /etc/nginx/ssl \
+    && openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+        -keyout /etc/nginx/ssl/sel-jari.key \
+        -out    /etc/nginx/ssl/sel-jari.crt \
+        -subj "/C=MA/ST=BENGUERIR/L=BENGUERIR/O=1337/OU=42/CN=sel-jari.42.fr"
+
+COPY conf/default.conf /etc/nginx/conf.d/
+
+ENTRYPOINT ["nginx", "-g", "daemon off;"]
+```
+
+**`openssl` is not in the base image.** Measured on `debian:bookworm`: no `openssl` binary and no such package installed, only the `libssl3` library. It has to be installed alongside nginx.
+
+**`rm /etc/nginx/sites-enabled/default` removes the packaged site**, which owns port 80 as its default server, as § 10 b explains. Deleting one symlink is preferable to editing the packaged `nginx.conf`, and it belongs in the same `RUN` for the whiteout reason in § 06 c.
+
+**The `COPY` comes last on purpose.** `default.conf` is the file that gets edited over and over, and every edit invalidates the cache for everything below it. Placed above the certificate `RUN`, each edit would regenerate a fresh key pair. Whatever changes most often goes last.
+
+**`daemon off;` is what keeps nginx in the foreground**, the same requirement as `php-fpm -F` and a foreground `mariadbd`. § 06 e covers why.
+
+</details>
+
+<br>
+
+<details>
+<summary><b>(default.conf) The server block, line by line</b></summary>
+
+<br>
+
+```nginx
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+
+    server_name sel-jari.42.fr;
+
+    ssl_certificate     /etc/nginx/ssl/sel-jari.crt;
+    ssl_certificate_key /etc/nginx/ssl/sel-jari.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root /var/www/html/;
+    index index.php;
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass wordpress:9000;
+    }
+}
+```
+
+**There is no port 80 block at all**, not even a redirect to HTTPS. A redirect would require listening on 80, and the subject allows one open port. What actually closes port 80 is the absence of a `ports:` mapping for it in Compose, not anything written here.
+
+| Directive | Role |
+|:--|:--|
+| `listen 443 ssl` | accept TLS connections on 443. The second line adds the IPv6 socket |
+| `server_name` | the name matched against the request's `Host` header |
+| `ssl_certificate` | the `.crt`, the public half sent to the browser |
+| `ssl_certificate_key` | the `.key`, which never leaves the container |
+| `ssl_protocols` | overrides Debian's `TLSv1 TLSv1.1 TLSv1.2 TLSv1.3` inherited from `http` |
+| `root` | the directory paths are resolved against, the shared volume |
+| `index` | what to serve when the path is a directory |
+| `location ~ \.php$` | a regex location: everything ending in `.php` goes to php-fpm |
+
+**Swapping the two certificate lines is a startup failure, not a warning.** Measured:
+
+```
+[emerg] cannot load certificate "/etc/nginx/ssl/s.key":
+        PEM_read_bio_X509_AUX() failed ... Expecting: TRUSTED CERTIFICATE
+```
+
+**`include snippets/fastcgi-php.conf;` ships with the Debian package**, and it is what supplies the FastCGI parameters § 09 a describes:
+
+```
+fastcgi_split_path_info ^(.+?\.php)(/.*)$;
+try_files $fastcgi_script_name =404;
+fastcgi_param PATH_INFO $path_info;
+fastcgi_index index.php;
+include fastcgi.conf;
+```
+
+**That last line is the important one.** `fastcgi.conf` sets `SCRIPT_FILENAME` to `$document_root$fastcgi_script_name`, the path php-fpm opens on its own filesystem. Without it php-fpm receives no filename and returns a blank page. `try_files ... =404` is a small security measure: a request for a `.php` file that does not exist is refused here rather than passed to php-fpm.
+
+</details>
+
+<br>
+
+<details>
+<summary><b>(docker-compose.yml) The service, and the two keys only nginx has</b></summary>
+
+<br>
+
+```yaml
+nginx:
+  image: nginx:1.0
+  build: ./requirements/nginx
+  networks: [inception]
+  restart: unless-stopped
+  ports: ["443:443"]
+  depends_on: [wordpress]
+  volumes:
+    - wordpress_volume:/var/www/html
+```
+
+**`ports:` appears exactly once in the whole file.** That single mapping is what makes nginx the only entrypoint. mariadb's 3306 and php-fpm's 9000 are bound inside their own network namespaces and reachable only from the `inception` network.
+
+**The volume is mounted a second time here**, the same named volume wordpress uses. § 09 b explains why: FastCGI sends a path, not code, so both containers must see the same files at the same path.
+
+**`depends_on` is not optional for nginx**, and the reason is different from wordpress's. nginx resolves `fastcgi_pass wordpress:9000` while parsing its configuration, at startup, not per request. If the wordpress container does not exist yet, the name does not resolve and nginx refuses to start:
+
+```
+[emerg] host not found in upstream "wordpress" in /etc/nginx/conf.d/default.conf:25
+nginx: configuration file /etc/nginx/nginx.conf test failed
+```
+
+**So the chain is mariadb, then wordpress, then nginx.** For wordpress `depends_on` is only ordering, since the entrypoint still has to wait for `mariadbd` to finish initialising. For nginx it is the difference between starting and crash-looping on a cold `up`.
+
+</details>
+
+<br>
+
+<details>
+<summary><b>The domain name, and why /etc/hosts is involved</b></summary>
+
+<br>
+
+**The subject fixes the name the site answers to:**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> To make things simpler, you have to configure your domain name so it points to your local IP address. This domain name must be login.42.fr.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**No DNS server anywhere knows `sel-jari.42.fr`.** `/etc/hosts` is a plain name-to-address table the resolver consults before asking DNS, so one line is enough:
+
+```
+127.0.0.1   sel-jari.42.fr
+```
+
+**`127.0.0.1` is loopback, meaning this machine.** The request therefore never leaves the host:
+
+```
+browser asks for sel-jari.42.fr
+   │ /etc/hosts answers 127.0.0.1
+   ▼
+this machine, port 443        ← published by ports: ["443:443"]
+   ▼
+nginx container
+```
+
+**The name has to match the certificate's `CN`.** Reaching the same server through `https://localhost` connects fine but adds a second browser warning, because the certificate says `sel-jari.42.fr` and the URL does not.
+
+</details>
+
+</details>
+
+
 </details>
 
 <a id="11--volumes"></a>
@@ -2499,5 +2692,67 @@ The container never starts, and the directory is still missing afterwards. So th
 **One device per volume.** Two volumes pointing at the same `device` is one directory with two names, and mariadb's tables would land beside WordPress's PHP files, in a directory nginx serves over HTTP.
 
 </details>
+
+</details>
+
+<a id="12--the-makefile"></a>
+<details>
+<summary><h1>12 · The Makefile</h1></summary>
+
+
+> **The Makefile is the only thing the evaluator runs. Everything else is reached through it.**
+
+**The subject fixes the chain in one direction:**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> A Makefile is also required and must be located at the root of your directory. It must set up your entire application (i.e., it has to build the Docker images using docker-compose.yml).
+>
+> You also have to write your own Dockerfiles, one per service. The Dockerfiles must be called in your docker-compose.yml by your Makefile.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**So `make` calls Compose, and Compose calls the Dockerfiles.** Nothing is built by hand, and no `docker build` is ever typed.
+
+<br>
+
+**There is one thing Compose cannot do for itself, and it is the reason `up` has a prerequisite.** As § 11 c shows, `type: none` creates no directory: if `/home/sel-jari/data/mariadb` is missing, the volume fails to mount and the container never starts. The Makefile has to create both directories first.
+
+```make
+COMPOSE		= docker compose -f srcs/docker-compose.yml
+DATA_DIR	= /home/sel-jari/data
+VOLUMES		= $(DATA_DIR)/mariadb $(DATA_DIR)/wordpress
+
+all: up
+
+$(VOLUMES):
+	mkdir -p $@
+
+up: $(VOLUMES)
+	$(COMPOSE) up -d --build
+```
+
+**`$(VOLUMES)` is a real target, not a phony one.** Each name is a directory on disk, so `make` runs `mkdir -p` only when the directory is missing and skips it otherwise. `$@` expands to whichever one is being built.
+
+<br>
+
+**`clean` and `fclean` must be different, and mixing them destroys the database:**
+
+```
+down     stop and remove the containers and the network
+clean    the above, plus the images this project built  (--rmi local)
+fclean   the above, plus the volumes and the host data  (down -v)
+```
+
+**`docker compose down` keeps volumes. `down -v` deletes them.** So `clean` can be run freely, while `fclean` is the one that wipes WordPress and starts the stack from nothing.
+
+**`fclean` is also the only place `sudo` is justified.** The files under `data/` were written by the container processes after they dropped privileges, so they are owned by UID 999 (`mysql`) and UID 33 (`www-data`), as § 06 f explains. Your own account cannot delete them.
+
+**No `sudo` anywhere else.** Being in the `docker` group is already enough to reach the socket, and `sudo mkdir` would create the data directories owned by root.
 
 </details>
