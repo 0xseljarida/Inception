@@ -47,10 +47,10 @@
     * [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
 * [12 · The Makefile](#12--the-makefile)
 * [13 · Bonus](#13--bonus)
-    * [a · redis cache](#a--redis-cache)
-    * [b · FTP server](#b--ftp-server)
-    * [c · A static website](#c--a-static-website)
-    * [d · Adminer](#d--adminer)
+    * [a · A static website](#a--a-static-website)
+    * [b · Adminer](#b--adminer)
+    * [c · redis cache](#c--redis-cache)
+    * [d · FTP server](#d--ftp-server)
     * [e · The service of my choice](#e--the-service-of-my-choice)
 
 ---
@@ -2791,18 +2791,20 @@ srcs/requirements/
 ├── wordpress/      mandatory
 ├── nginx/          mandatory
 └── bonus/
-    ├── redis/
-    ├── ftp/
     ├── static/
-    └── adminer/
+    ├── adminer/
+    ├── redis/
+    └── ftp/
 ```
+
+**The order below is my build order, easiest first.** The static site has no state and no dependency, Adminer reuses the php-fpm knowledge from § 09, redis only becomes work on the WordPress side where the cache plugin has to be configured, and the FTP server is the fiddly one: passive port range, chroot, and a user that maps onto the WordPress volume with the right ownership.
 
 <br>
 
 
-<a id="a--redis-cache"></a>
+<a id="a--a-static-website"></a>
 <details>
-<summary><h2>a · redis cache</h2></summary>
+<summary><h2>a · A static website</h2></summary>
 
 
 **To be written.**
@@ -2812,9 +2814,9 @@ srcs/requirements/
 ---
 
 
-<a id="b--ftp-server"></a>
+<a id="b--adminer"></a>
 <details>
-<summary><h2>b · FTP server</h2></summary>
+<summary><h2>b · Adminer</h2></summary>
 
 
 **To be written.**
@@ -2824,9 +2826,9 @@ srcs/requirements/
 ---
 
 
-<a id="c--a-static-website"></a>
+<a id="c--redis-cache"></a>
 <details>
-<summary><h2>c · A static website</h2></summary>
+<summary><h2>c · redis cache</h2></summary>
 
 
 **To be written.**
@@ -2836,9 +2838,9 @@ srcs/requirements/
 ---
 
 
-<a id="d--adminer"></a>
+<a id="d--ftp-server"></a>
 <details>
-<summary><h2>d · Adminer</h2></summary>
+<summary><h2>d · FTP server</h2></summary>
 
 
 **To be written.**
