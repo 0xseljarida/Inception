@@ -39,6 +39,7 @@
 * [10 · nginx](#10--nginx)
     * [a · What nginx is](#a--what-nginx-is)
     * [b · The configuration files](#b--the-configuration-files)
+    * [c · TLS and the certificate](#c--tls-and-the-certificate)
 * [11 · Volumes](#11--volumes)
     * [a · Why containers need them](#a--why-containers-need-them)
     * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
@@ -2229,6 +2230,154 @@ nginx: configuration file /etc/nginx/nginx.conf test failed
 
 </details>
 
+
+<a id="c--tls-and-the-certificate"></a>
+<details>
+<summary><h2>c · TLS and the certificate</h2></summary>
+
+
+**nginx cannot serve HTTPS without two files**, and the image has to produce them itself:
+
+```dockerfile
+RUN mkdir -p /etc/nginx/ssl \
+    && openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+        -keyout /etc/nginx/ssl/sel-jari.key \
+        -out    /etc/nginx/ssl/sel-jari.crt \
+        -subj "/C=MA/ST=BENGUERIR/L=BENGUERIR/O=1337/OU=42/CN=sel-jari.42.fr"
+```
+
+> **A certificate is a public key bound to an identity, plus a signature over that binding.**
+
+**The two files are the two halves of one key pair.** `openssl` generates both in a single command:
+
+```text
+sel-jari.key   the private key    stays in the container, never sent to anyone
+sel-jari.crt   the certificate    the public key + the identity + a signature, sent to every browser
+```
+
+**Normally the signature comes from a certificate authority**, which verifies you control the domain before signing. No authority will ever sign `sel-jari.42.fr`, so the key signs its own certificate. RFC 5280 defines that case directly:
+
+> Self-signed certificates are self-issued certificates where the digital signature may be verified by the public key bound into the certificate.
+
+**Which is exactly what the output shows:**
+
+```text
+subject = ... CN = sel-jari.42.fr
+issuer  = ... CN = sel-jari.42.fr      ← the same name, nothing above it
+```
+
+**The browser warning follows from that, and is expected.** A browser trusts a certificate by walking up the chain to a root it already holds. Here there is no chain, so verification stops immediately with a self-signed error. Clicking through it is the normal demonstration for this project.
+
+<br>
+
+**What each option does:**
+
+| Option | Role |
+|:--|:--|
+| `req` | the certificate-request subcommand |
+| `-x509` | *"outputs a certificate instead of a certificate request"*, so no authority is involved |
+| `-nodes` | do not encrypt the private key on disk |
+| `-newkey rsa:2048` | generate a fresh 2048-bit RSA key pair in the same command |
+| `-days 365` | how long the certificate stays valid. Without it the default is 30 |
+| `-keyout` | where the private key is written |
+| `-out` | where the certificate is written |
+| `-subj` | the identity, supplied inline so the build never stops to prompt |
+
+**`-nodes` is the one that breaks the container if forgotten.** It means *no DES*, do not encrypt the key. An encrypted key makes nginx block at startup waiting for a passphrase that nobody can type into a container. OpenSSL 3.0 renamed it `-noenc` and kept `-nodes` working as a deprecated alias.
+
+**`CN` must be the domain.** It is the only field of `-subj` with a technical role. `C` must be a two-letter country code, and `ST`, `L`, `O`, `OU` are free text that nothing verifies.
+
+**Modern browsers no longer read `CN` for that, though.** They match the URL against the `subjectAltName` extension, and the command above produces a certificate with no `subjectAltName` at all, measured with `openssl x509 -noout -text`. Chrome removed the `CN` fallback in version 58, calling it deprecated by RFC 2818 *"for nearly two decades"*. Adding the extension is one more option:
+
+```
+-addext "subjectAltName=DNS:sel-jari.42.fr"
+```
+
+**It changes nothing about the warning.** The certificate is still self-signed, so the browser still refuses to trust it. The extension only makes the *name* correct, turning two complaints back into one.
+
+**Only the certificate is public.** The private key must stay unreadable to anyone else, which is why `openssl` creates it `0600` by default.
+
+<br>
+
+<details>
+<summary><b>DEEPDIVE: what the key pair is actually doing</b></summary>
+
+<br>
+
+**Symmetric encryption needs a shared secret, and that is the problem.** One key encrypts and decrypts, so both sides must already have it. Two machines that have never met cannot agree on one over a wire that an attacker is reading.
+
+**Asymmetric cryptography breaks that deadlock with two mathematically linked keys:**
+
+```text
+public key    can be handed to anyone      verifies signatures, encrypts to the owner
+private key   never leaves the machine     creates signatures, decrypts
+```
+
+**RSA is one such algorithm**, built on the difficulty of factoring the product of two large primes. `rsa:2048` is the size of that product in bits. The public and private key are two different views of the same numbers, and deriving one from the other means factoring a 2048-bit integer.
+
+<br>
+
+**A signature is not encryption.** These are different operations and confusing them is the usual mistake:
+
+```text
+encrypt   with the PUBLIC key   →  only the private key can read it       confidentiality
+sign      with the PRIVATE key  →  anyone with the public key can check   authenticity
+```
+
+**Signing a certificate means:** hash the certificate body, then transform that hash with the private key. Anyone holding the public key can reverse the transform and compare hashes. A match proves the holder of the private key produced it, and that nothing was altered afterwards.
+
+<br>
+
+**The certificate is a structured document, not a blob.** RFC 5280 splits it into three fields:
+
+```text
+tbsCertificate      "to be signed": version, serial, issuer, subject,
+                     validity (notBefore/notAfter), subjectPublicKeyInfo, extensions
+signatureAlgorithm   which algorithm signed it
+signatureValue       the signature over the DER encoding of tbsCertificate
+```
+
+**`openssl x509 -noout -text` prints exactly those fields**, and every one of them came from either `-subj`, `-days`, or the generated key.
+
+**`.crt` and `.key` are both PEM**, base64 wrapped in header lines, which is why they are readable text:
+
+```text
+-----BEGIN CERTIFICATE-----
+-----BEGIN PRIVATE KEY-----
+```
+
+The extension is convention only. nginx decides what a file is by which directive points at it, `ssl_certificate` or `ssl_certificate_key`.
+
+<br>
+
+**Where the key is used during a connection, and it is not where most explanations put it.** In TLS 1.3 the certificate plays no part in establishing the session key:
+
+> Static RSA and Diffie-Hellman cipher suites have been removed; all public-key based key exchange mechanisms now provide forward secrecy.
+>
+> <sub><i>RFC 8446, TLS 1.3</i></sub>
+
+**The session key comes from an ephemeral Diffie-Hellman exchange instead**, and the certificate is used only to prove who is on the other end:
+
+```text
+1  client and server exchange (EC)DHE key shares
+2  both derive the same session key, which never travels the wire
+3  server sends its certificate
+4  server signs the handshake with its private key   ← CertificateVerify
+5  client checks that signature against the public key in the certificate
+6  everything after this point is symmetric encryption with the session key
+```
+
+**Step 4 is the only place the private key is used.** So the key pair authenticates, and forward secrecy follows: recovering the private key later does not decrypt a recorded session, because the session key was never derived from it.
+
+**In TLS 1.2 that was not true.** The old RSA key-exchange suites had the client encrypt the premaster secret to the certificate's public key, so stealing that key decrypted every past session captured with it. Removing that is one of the main reasons TLS 1.3 exists, and one reason the subject allows only these two versions.
+
+<br>
+
+**Why 2048 and not 4096.** 2048-bit RSA is the current baseline, roughly 112 bits of security, and is what public authorities issue by default. 4096 is slower to generate and slower per handshake for a margin nothing in this project needs. Modern deployments increasingly prefer ECDSA keys, which reach the same strength with far smaller numbers, but RSA is the universally supported choice and the one every reference for this project uses.
+
+</details>
+
+</details>
 </details>
 
 <a id="11--volumes"></a>
