@@ -1,5 +1,6 @@
 services:
   mariadb:
+    image: mariadb:1.0
     build: ./requirements/mariadb
     networks: [inception]
     env_file: [./.env]
@@ -9,11 +10,23 @@ services:
       - mariadb_volume:/var/lib/mysql
 
   wordpress:
+    image: wordpress:1.0
     build: ./requirements/wordpress
     networks: [inception]
     env_file: [./.env]
     restart: unless-stopped
     secrets: [credentials, db_password]
+    depends_on: [mariadb]
+    volumes:
+      - wordpress_volume:/var/www/html
+
+  nginx:
+    image: nginx:1.0
+    build: ./requirements/nginx
+    networks: [inception]
+    restart: unless-stopped
+    ports: ["443:443"]
+    depends_on: [wordpress]
     volumes:
       - wordpress_volume:/var/www/html
 
