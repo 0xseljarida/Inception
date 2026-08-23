@@ -20,13 +20,20 @@ services:
     volumes:
       - wordpress_volume:/var/www/html
 
+  adminer:
+    image: adminer:1.0
+    build: ./requirements/bonus/adminer
+    networks: [inception]
+    restart: unless-stopped
+    depends_on: [mariadb]
+
   nginx:
     image: nginx:1.0
     build: ./requirements/nginx
     networks: [inception]
     restart: unless-stopped
     ports: ["443:443"]
-    depends_on: [wordpress]
+    depends_on: [wordpress, adminer]
     volumes:
       - wordpress_volume:/var/www/html
 
