@@ -50,9 +50,14 @@ docker run --rm debian:bookworm true
 ### 3. Map the domain
 
 ```bash
-sudo sh -c 'echo "127.0.0.1       sel-jari.42.fr" >> /etc/hosts'
+make hosts                          # appends the line, guarded, asks for sudo
 getent hosts sel-jari.42.fr
+getent hosts sel-jari.resume.42.fr
 ```
+
+The target is deliberately not a prerequisite of `up`: `make` must never ask for
+a root password just to start containers. The guard is a `grep -qF` on the
+resume domain, so the rule is idempotent.
 
 `/etc/hosts` is consulted before DNS, so the request never leaves the machine.
 
