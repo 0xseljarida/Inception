@@ -30,6 +30,13 @@ services:
     volumes:
       - wordpress_volume:/var/www/html
 
+  resume:
+    image: resume:1.0
+    build: ./requirements/bonus/resume
+    networks: [inception]
+    restart: unless-stopped
+    ports: ["1337:1337"]
+
 secrets:
     db_password:
       file: ../secrets/db_password.txt
