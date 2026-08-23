@@ -16,9 +16,15 @@ services:
     env_file: [./.env]
     restart: unless-stopped
     secrets: [credentials, db_password]
-    depends_on: [mariadb]
+    depends_on: [mariadb, redis]
     volumes:
       - wordpress_volume:/var/www/html
+
+  redis:
+    image: redis:1.0
+    build: ./requirements/bonus/redis
+    networks: [inception]
+    restart: unless-stopped
 
   adminer:
     image: adminer:1.0
