@@ -2991,7 +2991,352 @@ location /adminer/ {
 <summary><h2>c · redis cache</h2></summary>
 
 
-**To be written.**
+> **Redis is an in-memory key value data store: a server process that keeps data in RAM, addresses it by string keys, and answers over TCP on port 6379.**
+
+**It exists because RAM is orders of magnitude faster than a database query.** A SQL query has to be parsed, planned, executed against indexes, and read from disk or from the database's own buffer pool. A Redis lookup is a hash table read in a process that never touches the disk. Anything expensive to compute and cheap to lose belongs in front of the database, not in it.
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> Set up redis cache for your WordPress website in order to properly manage the cache.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**WordPress is exactly the workload this helps.** A single page load issues dozens of queries for the same rows: the site options, the active theme, the post objects, the user meta. With Redis in front, WordPress asks Redis first and only falls back to MariaDB on a miss, storing the answer for the next request.
+
+```text
+without redis                     with redis
+wordpress                         wordpress
+   │ SQL, every request              │ GET key
+   ▼                                 ▼            miss only
+mariadb                            redis ──────────────> mariadb
+```
+
+<br>
+
+**Two distinctions matter more than the commands.**
+
+**Redis is not a manager of the cache, it is the cache.** The server holds the values and executes `GET`, `SET`, and expiry. What to store, under which key, for how long, and when to fall back to MariaDB is decided by the WordPress side, not by Redis.
+
+**MariaDB is the source of truth, Redis is a copy.** Losing the entire Redis dataset costs a slower next page load and nothing else. That is why this container gets no volume, while mariadb cannot work without one.
+
+**Redis and MariaDB never talk to each other.** There is no replication and no connection between the two containers. WordPress is the only link, and consistency exists only because WordPress overwrites or deletes the cached key when it updates the row.
+
+```text
+wordpress ──> redis      (fast copy)
+    └───────> mariadb    (source of truth)
+```
+
+<br>
+
+
+<details>
+<summary><b>DEEPDIVE · the concepts behind the cache</b></summary>
+
+<br>
+
+**A key value store is the simplest database model there is.** There are no tables, no columns, no schema, and no joins. There is one flat namespace of keys, each holding one value, and the only questions the server can answer are "what is at this key" and "put this at this key".
+
+```text
+relational                        key value
+┌───────────────────────┐         ┌──────────────────────────────────┐
+│ wp_options            │         │ wordpress:options:alloptions  -> │
+│  option_id  name  val │         │ wordpress:posts:42            -> │
+│  1  siteurl  ...      │         │ wordpress:users:1             -> │
+└───────────────────────┘         └──────────────────────────────────┘
+ query planner, indexes,           hash table lookup
+ joins, disk pages
+```
+
+**The value is a byte string as far as the cache is concerned.** WordPress serialises a PHP array or object into a string, stores it, and unserialises it on the way back. Redis itself also has richer types, lists, hashes, sets, sorted sets, but the object cache only needs strings.
+
+<br>
+
+**In memory is the whole point, and the whole risk.** The dataset lives in the process address space, so a restart of the container loses it. Redis can persist to disk, and understanding the two mechanisms is worth it even though this project uses neither:
+
+| Mechanism | What it does |
+|:--|:--|
+| **RDB** | writes a point in time snapshot of the whole dataset to a file, every N seconds or on demand |
+| **AOF** | appends every write command to a log file, replayed at startup to rebuild the dataset |
+
+**Neither is wanted here.** Persistence would mean a volume, disk writes on every cached value, and a cache that outlives the database it mirrors. A cold cache after a restart is the correct behaviour: WordPress simply queries MariaDB and refills it.
+
+<br>
+
+**Keys can expire, and expiry is what keeps a cache from becoming stale.** A key set with a TTL is deleted automatically once the time is up, so cached data has a lifetime instead of living forever.
+
+```text
+SET key value EX 300      the key disappears 300 seconds later
+TTL key                   how many seconds remain
+```
+
+**Redis does not scan the whole keyspace looking for expired keys.** It removes them lazily, when a key is accessed and found to be expired, and also samples random keys periodically in the background. The effect is that expired keys stop being visible immediately, while the memory they used is reclaimed slightly later.
+
+<br>
+
+**Eviction is different from expiry, and this is the distinction people get wrong.** Expiry is a deadline the writer chose. Eviction is what the server does when it runs out of the memory it was allowed, regardless of any deadline.
+
+```text
+maxmemory           the limit. Default 0, meaning no limit on 64 bit systems
+maxmemory-policy    what to delete when the limit is reached
+```
+
+**With the default policy, `noeviction`, nothing is deleted and writes start failing with an error while reads keep working.** That is the right default for a data store and the wrong one for a cache, where the usual choice is:
+
+```text
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+```
+
+**`allkeys-lru` evicts the least recently used key**, which is the sensible default when a small subset of the data is read far more often than the rest. The `volatile-*` policies only consider keys that carry a TTL, and behave like `noeviction` when no key has one. Redis approximates LRU by sampling a handful of random keys rather than maintaining an exact ordering, because exact LRU costs more memory than it saves.
+
+<br>
+
+**On the WordPress side, the object cache is the mechanism being replaced.** WordPress already has one, `WP_Object_Cache`, and it is non persistent: it holds values in PHP memory for the duration of a single request and throws them away when the request ends. Two requests for the same page each query MariaDB from scratch.
+
+**A drop-in replaces it.** A file named `object-cache.php` placed in `wp-content/` is loaded by WordPress instead of the built in class, and every `wp_cache_get()` and `wp_cache_set()` call then goes to Redis. Plugin code does not change, because plugins call those functions rather than the class.
+
+```text
+wp_cache_get( 'alloptions', 'options' )
+        │
+        ▼
+wp-content/object-cache.php        the drop in
+        │
+        ▼
+redis:6379
+```
+
+**Transients follow automatically.** Without a persistent object cache, `set_transient()` writes to the `wp_options` table, which means the "cache" is another row in the database. With one installed, transients use the `wp_cache_*` functions instead, so they land in Redis.
+
+<br>
+
+**Version note.** Debian 12 Bookworm packages `redis-server` 5:7.0.15-1~deb12u9, measured with `apt-cache policy` in a throwaway `debian:bookworm` container. The eviction policies above are documented for Redis 7 and later.
+
+<br>
+
+Sources:
+* https://redis.io/docs/latest/develop/reference/eviction/
+* https://developer.wordpress.org/reference/classes/wp_object_cache/
+* https://developer.wordpress.org/apis/transients/
+
+</details>
+
+
+<details>
+<summary><b>The redis container</b></summary>
+
+<br>
+
+```dockerfile
+FROM debian:bookworm
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y redis-server redis-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+ENTRYPOINT [ "redis-server", "--protected-mode", "no", \
+             "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru" ]
+```
+
+**This is the smallest container in the project and it has no configuration file at all.** That is deliberate, and it works because of one detail: `redis-server` reads `/etc/redis/redis.conf` **only when the path is given as its first argument**. No argument is given, so the packaged file is ignored and the server starts from its built-in defaults, which every command line flag then overrides.
+
+**That matters, because Debian's packaged file is hostile to containers.** Measured inside a throwaway `debian:bookworm` with `redis-server` installed:
+
+| Packaged setting | What it would do here |
+|:--|:--|
+| `daemonize yes` | PID 1 would fork and the parent exit, so the container stops immediately |
+| `bind 127.0.0.1 -::1` | only loopback inside its own network namespace, so wordpress could never connect |
+| `protected-mode yes` | refuses connections from outside loopback when no password is set |
+
+**`--protected-mode no` is safe here only because of the network.** Redis has no password and would be wide open, but the service publishes no port, so it exists only on the `inception` network and nothing outside Docker can reach it. Publishing `6379` would put an unauthenticated database on the host.
+
+**The two memory flags are the answer to "how do you manage the cache".** Built-in defaults are `maxmemory 0`, no limit, and `noeviction`, which means writes start failing once RAM fills instead of old keys being dropped. A ceiling plus `allkeys-lru` is the behaviour a cache is supposed to have.
+
+**`redis-tools` is not needed to run the server.** It provides `redis-cli`, which is how the cache is inspected during a defense:
+
+```text
+redis-cli DBSIZE            how many keys are cached
+redis-cli INFO stats        keyspace_hits and keyspace_misses
+redis-cli CONFIG GET maxmemory-policy
+```
+
+</details>
+
+
+<details>
+<summary><b>The WordPress side</b></summary>
+
+<br>
+
+**Redis alone changes nothing.** WordPress has to be told to use it, and that takes one package in the image and three commands at first boot.
+
+**The package is the PHP extension**, `php8.2-redis`, version 5.3.7+4.3.0-3 in Debian 12. It is the C extension that lets PHP speak RESP. Without it the drop-in loads and immediately fails, because PHP has no `Redis` class.
+
+```dockerfile
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	php8.2-fpm \
+	php8.2-mysql \
+	php8.2-redis \
+	ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+```
+
+**The three commands live in the entrypoint, inside the first boot guard:**
+
+```bash
+	wp plugin install redis-cache --activate --allow-root
+	wp config set WP_REDIS_HOST redis --allow-root
+	wp redis enable --allow-root
+```
+
+**Their position in the script is not a detail, it is the whole thing.** Three rules, each learned by breaking it:
+
+| Rule | What happens otherwise |
+|:--|:--|
+| after `wp core install` | the database has no tables yet, so every command that loads WordPress fails with `Error: The site you have requested is not installed.` |
+| inside the `if [ ! -f wp-config.php ]` guard | the plugin is reinstalled over the network on every restart, and one failure turns into a crash loop through `restart: unless-stopped` |
+| `--allow-root` on each | wp-cli refuses: `YIKES! It looks like you're running this as root.` |
+
+**`wp redis enable` is the command that actually does the work.** It writes `wp-content/object-cache.php`, the drop-in. Installing and activating the plugin without it leaves WordPress querying MariaDB for everything.
+
+**`WP_REDIS_PORT` is not set** because the plugin defaults to 6379.
+
+**Verified on a cold boot**, from an empty `/home/sel-jari/data`:
+
+```text
+Status: Connected
+Client: PhpRedis (v5.3.7)
+Drop-in: Valid
+DBSIZE 49                        keys present after two page loads
+keyspace_hits 96 / misses 90
+```
+
+</details>
+
+
+<details>
+<summary><b>The Compose service</b></summary>
+
+<br>
+
+```yaml
+  redis:
+    image: redis:1.0
+    build: ./requirements/bonus/redis
+    networks: [inception]
+    restart: unless-stopped
+```
+
+**Four lines, and the absences are the interesting part.** No `ports`, because only nginx is an entrypoint and WordPress reaches Redis by service name on the internal network. No `volumes`, because the dataset is a losable copy. No `env_file` and no `secrets`, because there is nothing to configure and no password.
+
+**`wordpress` gains the dependency**, since its first boot now calls `wp redis enable`, which fails if Redis is unreachable:
+
+```yaml
+    depends_on: [mariadb, redis]
+```
+
+**`depends_on` waits for the container to start, not for the server to be ready.** Redis is listening in well under the time WordPress spends waiting for MariaDB, so no extra wait loop is needed for it.
+
+</details>
+
+
+<details>
+<summary><b>DEEPDIVE · how Redis actually works, and where it came from</b></summary>
+
+<br>
+
+**Redis was written to solve a write rate problem, not a read cache problem.** In 2008 and 2009 Salvatore Sanfilippo, antirez, was running LLOOGG, a real time web analytics service, and MySQL could not keep up with the rate at which page views had to be recorded and re-read. His conclusion was that the working set belonged in memory, and that the database should expose data structures rather than tables.
+
+**Version 0.1 was sent on 10 February 2009 and understood three commands: `set`, `get`, `del`.** The second tarball, around 25 February, coincided with the first public post on Hacker News, with the whole codebase still under 3700 lines of C including comments. The event loop was borrowed from Jim Tcl and reimagined as a command interpreter, which is why the architecture below has been stable for fifteen years: it was there in the first month.
+
+**What it solved, stated plainly:** a data store where an operation costs a hash lookup and a memory write instead of a query plan and a disk seek, and where the client can ask for a list, a set, or a counter instead of assembling one out of rows.
+
+<br>
+
+**The server is a single threaded event loop, and that is a design decision rather than a limitation.**
+
+```text
+        ┌──────────────────────────────────────────────┐
+        │              one thread, one loop            │
+        │                                              │
+   epoll_wait ──> which sockets are readable?          │
+        │                                              │
+        ├──> read bytes from a client socket           │
+        ├──> parse RESP into a command + arguments     │
+        ├──> execute it: hash table lookup, write      │
+        ├──> append the reply to the client's buffer   │
+        └──> write buffers back to sockets, repeat     │
+        └──────────────────────────────────────────────┘
+```
+
+**Measured in the project's own container:**
+
+```text
+redis_version:7.0.15
+multiplexing_api:epoll
+io_threads_active:0
+process_id:1
+```
+
+**`epoll` is the kernel mechanism that makes one thread enough.** Instead of one thread blocking per connection, the process registers thousands of sockets with the kernel and asks a single question: which of these are ready now. The loop then does a tiny amount of work per ready socket.
+
+**Why not threads?** Because the work per command is measured in microseconds and is dominated by memory access, so locking would cost more than it saves. One thread also means commands are executed one at a time, in arrival order, which is why Redis needs no concurrency control: atomicity is a property of the architecture, not a feature bolted on. Redis 6 added `io-threads` for reading and writing sockets only, never for executing commands, and it is off by default, which the measurement above confirms.
+
+<br>
+
+**RESP, the Redis Serialization Protocol, is what travels on TCP port 6379.** It is deliberately human readable, and every part is terminated by `\r\n`.
+
+**A client always sends an array of bulk strings**, the command name first, then its arguments:
+
+```text
+C: *2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n
+S: :48293\r\n
+```
+
+**The first byte of a reply identifies its type**, which is what makes the parser trivial:
+
+| Byte | Type | Example |
+|:--|:--|:--|
+| `+` | simple string | `+OK\r\n` |
+| `-` | error | `-ERR unknown command 'asdf'\r\n` |
+| `:` | integer | `:1000\r\n` |
+| `$` | bulk string, length prefixed | `$5\r\nhello\r\n`, and `$-1\r\n` for a missing key |
+| `*` | array | `*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n` |
+
+**Length prefixes are the reason it parses as fast as a binary protocol.** Nothing has to be scanned for delimiters or unescaped: read the number, then read exactly that many bytes.
+
+**Redis also accepts inline commands**, space separated and newline terminated, precisely so that a bare `telnet` or a bash `/dev/tcp` redirection can talk to it. No command starts with `*`, so the server can tell the two forms apart.
+
+<br>
+
+**Inside, the keyspace is a hash table.** Every key of a database lives in one dictionary mapping the key string to a value object, and a second dictionary holds the expiration timestamps of the keys that have one.
+
+```text
+db->dict      "wp:options:alloptions" -> value object
+db->expires   "wp:options:alloptions" -> unix time in ms
+```
+
+**Growing that hash table cannot be allowed to block the loop**, so rehashing is incremental: a new larger table is allocated and buckets are migrated a few at a time, on every subsequent operation, while lookups check both tables. A resize of a dataset with millions of keys therefore never produces a pause.
+
+**Expiration is not a timer per key either.** A key is removed lazily, when something touches it and finds it expired, and a background cycle also samples random keys from `db->expires` and deletes the expired ones. The visible behaviour is exact, an expired key is never returned, while the memory is reclaimed slightly later.
+
+<br>
+
+**Everything above explains the one number that matters for this project:** a `GET` from WordPress costs a socket read, a RESP parse, one hash lookup, and a socket write, with no disk in the path at all. The equivalent `SELECT` against MariaDB costs parsing, planning, index traversal, and potentially a page read. That gap is what the cache buys, and it is also why losing the cache costs nothing but time.
+
+<br>
+
+Sources:
+* https://redis.io/docs/latest/develop/reference/protocol-spec/
+* https://github.com/antirez/historical-redis-versions
+* https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/latency/
+* https://redis.io/docs/latest/commands/info/
+
+</details>
 
 </details>
 
