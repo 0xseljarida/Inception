@@ -2815,7 +2815,139 @@ srcs/requirements/
 <summary><h2>a · A static website</h2></summary>
 
 
-**To be written.**
+> **A static website is a site whose files are sent to the browser exactly as they are stored on disk, with no code executed on the server.**
+
+**The server does one thing: map a URL to a file and send it.** No interpreter runs, no database is queried, nothing is generated per request. This is the opposite of WordPress, where every `.php` request is handed to php-fpm, which executes code and builds the page.
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> Create a simple static website in the language of your choice except PHP (yes, PHP is excluded). For example, a showcase site or a site for presenting your resume.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**The exclusion of PHP is the whole constraint.** HTML and CSS satisfy it, and JavaScript does too, because JavaScript runs in the visitor's browser and not in the container. Nothing in this container executes anything.
+
+<br>
+
+**So the container is the smallest one in the project:** nginx, a configuration file, and the files themselves.
+
+```text
+srcs/requirements/bonus/resume/
+├── Dockerfile
+├── conf/
+│   └── default.conf
+└── srcs/
+    ├── index.html
+    └── style.css
+```
+
+**No volume, no secret, no environment variable, no `depends_on`.** The site has no state to keep and talks to nothing, so the files are baked into the image with `COPY` rather than mounted. Rebuilding the image is how the site is updated.
+
+<br>
+
+
+<details>
+<summary><b>The Dockerfile</b></summary>
+
+<br>
+
+```dockerfile
+FROM debian:bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nginx \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm /etc/nginx/sites-enabled/default
+
+COPY conf/default.conf /etc/nginx/conf.d/
+
+COPY ./srcs/ /var/www/static
+
+ENTRYPOINT [ "nginx", "-g", "daemon off;" ]
+```
+
+**`rm /etc/nginx/sites-enabled/default` is not optional here either.** The Debian package ships a `server` block that claims port 80 as `default_server` with `root /var/www/html`, and `nginx.conf` includes it alongside `conf.d/`. Left in place, it either collides with my own block, or wins and serves the welcome page:
+
+```text
+nginx: [emerg] a duplicate default server for 0.0.0.0:80
+```
+
+**Every line of a multi-line `RUN` ends with `\` except the last one.** Getting this wrong is silent in one direction and fatal in the other:
+
+| Mistake | What actually happens |
+|:--|:--|
+| `\` left on the last line | the next instruction is swallowed into the `RUN`, so `rm -rf /var/lib/apt/lists/* COPY conf/default.conf /etc/nginx/conf.d/` runs and deletes `conf.d/`. BuildKit only warns: `NoEmptyContinuation` |
+| `\` missing on a middle line | the next line starts with `&&`, which is not an instruction: `unknown instruction: &&` |
+
+**`COPY ./srcs/ /var/www/static` copies the directory, not a glob.** Writing `COPY ./srcs/* /var/www/static` looks equivalent and is not: the shell-style glob expands to each entry, and the contents of each subdirectory are copied into the destination, flattening the tree. Measured:
+
+```text
+srcs/index.html        ->  /var/www/static/index.html
+srcs/css/style.css     ->  /var/www/static/style.css     the css/ directory is gone
+```
+
+Every `<link href="css/style.css">` would then return 404.
+
+</details>
+
+
+<details>
+<summary><b>The server block</b></summary>
+
+<br>
+
+```nginx
+server {
+	listen 1337;
+	listen [::]:1337;
+
+	server_name sel-jari.resume.42.fr;
+
+	root /var/www/static/;
+
+	index index.html;
+}
+```
+
+**`root` is the mapping, and it is the only thing nginx needs to serve a file.** The path opened for a request is `root` plus the request URI, so `GET /style.css` reads `/var/www/static/style.css`. nginx has a compiled-in default of `root html;`, relative to the prefix, which is why an untouched nginx serves a welcome page at all.
+
+**`index` is separate from `root`.** It only decides which file answers a URI ending in `/`, so `GET /` becomes `/var/www/static/index.html`.
+
+**`server_name` is decorative in this container.** It selects between competing `server` blocks listening on the same address and port, and this container has exactly one block, so every request lands here whatever the `Host` header says. For the name to work in a browser it also has to resolve, which means a line on the host:
+
+```text
+127.0.0.1       sel-jari.42.fr sel-jari.resume.42.fr
+```
+
+**No `try_files` is needed.** The static file module already returns 404 when the file is missing. `try_files $uri $uri/ =404;` makes that explicit and matters once there are rewrites, which there are none of here.
+
+</details>
+
+
+<details>
+<summary><b>The Compose service</b></summary>
+
+<br>
+
+```yaml
+  resume:
+    image: resume:1.0
+    build: ./requirements/bonus/resume
+    networks: [inception]
+    restart: unless-stopped
+    ports: ["1337:1337"]
+```
+
+**Port 80 inside the container would have been fine too.** Each container has its own network namespace, so it has its own set of port numbers: the resume container's port 80 and the mandatory nginx's port 80 are two different things and cannot collide.
+
+**What must not be taken is host port 80.** The subject makes nginx the only entrypoint on 443, so an open port 80 on the host reads as a second, plain HTTP entrypoint into the infrastructure. Publishing `1337:1337` keeps the mandatory rule intact and still reaches the site.
+
+</details>
 
 </details>
 
@@ -2827,7 +2959,27 @@ srcs/requirements/
 <summary><h2>b · Adminer</h2></summary>
 
 
-**To be written.**
+> **Adminer is a database administration tool that ships as a single PHP file: it connects to a database server and exposes it as a web interface.**
+
+**It exists to replace a terminal client.** Instead of `mariadb -u wp_user -p` and typing SQL, the browser shows the databases, the tables, the rows, and lets them be edited. For this project it is a way to inspect the WordPress database that the evaluator can see.
+
+**Adminer is PHP, and that decides the architecture of the container.** PHP is not a server: something has to receive the HTTP request, and something has to execute the code. Those are two different programs, exactly as in § 09:
+
+```text
+browser --HTTP--> web server --FastCGI--> php-fpm --> adminer.php --> mariadb
+```
+
+**One container cannot run both**, because a container runs a single foreground daemon as PID 1. So the Adminer container runs php-fpm only, and the web server in front of it is the mandatory nginx, which gains one `location`:
+
+```nginx
+location /adminer/ {
+    fastcgi_pass adminer:9000;
+}
+```
+
+**The consequence to think about is `SCRIPT_FILENAME`.** nginx does not open the PHP file, it sends a path to php-fpm, and php-fpm opens that path inside *its own* filesystem. So the path has to be correct in the Adminer container, not in nginx.
+
+**Implementation to be written.**
 
 </details>
 
