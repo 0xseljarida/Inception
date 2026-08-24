@@ -3506,6 +3506,51 @@ restarts: 0 on all seven containers
 netdata process: netdata [-D], running as uid 999 (netdata)
 ```
 
+<br>
+
+
+<details>
+<summary><b>DEEPDIVE · how netdata actually sees what it sees</b></summary>
+
+<br>
+
+**A normal process only knows what its own namespaces show it.** A container's `/proc` is not a copy of the host's, it is a view the kernel generates that only lists the processes inside that container's own PID namespace, and its network interfaces are the ones inside its own network namespace. That isolation is the entire point of a container, covered in § 02, and it is exactly what has to be worked around to build a monitoring agent, because a monitor is only useful if it can see everything, not just itself.
+
+<br>
+
+**`/proc` and `/sys` are not files on disk, they are interfaces the kernel exposes at runtime.** Reading `/proc/stat` does not read bytes someone wrote, it asks the kernel scheduler for the CPU counters it is tracking right now, formatted as text. `/sys` exposes the same idea for devices: every block device, network interface, and thermal sensor has a directory there, generated live.
+
+```text
+cat /proc/meminfo         kernel formats memory accounting on every read
+cat /sys/class/net/eth0/statistics/rx_bytes    counter maintained by the network driver
+```
+
+**Bind mounting the host's `/proc` and `/sys` into the container**, read only, means netdata's reads of `/host/proc/stat` return the host kernel's real counters, for every process on the machine, not just the ones inside netdata's own container.
+
+<br>
+
+**The Docker socket is a different kind of access: it is not a filesystem, it is dockerd's API.** `/var/run/docker.sock` is a Unix socket, and anything that can write to it can send it the same HTTP requests the `docker` CLI sends, listing containers, reading their resource usage, even starting and stopping them. Mounting it read only into netdata does not make the API read only, `:ro` only affects the socket file's permissions inside the container, not what the daemon allows once a request arrives. netdata only ever issues read requests, `GET /containers/json` and similar, but the socket itself grants far more than that. This is the single most sensitive line in the whole project's Compose file, and it is why the container gets no other privilege: no extra Linux capabilities, no `privileged: true`, nothing beyond what these four mounts and `pid: host` grant.
+
+<br>
+
+**`pid: host` is the one namespace actually being shared, and only that one.** Namespaces are independent of each other: sharing the PID namespace does not share the network namespace, which is exactly why netdata still needed `bind to = 0.0.0.0` even after `pid: host` was set. The container still has its own `eth0` and its own loopback, unaffected by which PID namespace it is in. `pid: host` only changes one thing: `/proc/<pid>` inside the container enumerates the host's real processes with the host's real PIDs, which is what lets netdata attribute CPU and memory to the correct process instead of only seeing its own single process tree.
+
+<br>
+
+**Once metrics are collected, they never touch a database.** netdata's per second samples live in a fixed size ring buffer in RAM, `dbengine`, which is why the very first log line every run prints is about disk space for that buffer, `multidb diskspace to 256MB`, measured on this container:
+
+```text
+MAIN : Found 0 legacy dbengines, setting multidb diskspace to 256MB
+```
+
+**No volume is declared for this container**, and that is a deliberate consequence of the ring buffer design, not an oversight: old samples are simply overwritten as new ones arrive, so losing the container's writable layer on a restart costs only the last few hours of history, nothing structural. This mirrors the redis container in § c: both hold data that is entirely disposable, for the same reason, neither is a source of truth.
+
+<br>
+
+**One thing this container cannot promise, which is worth stating plainly for the defense:** `pid: host` and the Docker socket mount are both real reductions in isolation, on the one container that carries them. Nothing else in the stack shares any namespace with the host, and this container publishes only its own dashboard port. The trade is deliberate: full visibility for one purpose built monitoring container, in exchange for a smaller blast radius everywhere else.
+
+</details>
+
 </details>
 
 </details>
