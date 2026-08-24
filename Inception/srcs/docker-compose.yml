@@ -56,12 +56,6 @@ services:
     build: ./requirements/bonus/netdata
     networks: [inception]
     ports: ["19999:19999"]
-    environment:
-      - NETDATA_HOST_PREFIX=/host
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /etc/os-release:/host/etc/os-release:ro
     restart: unless-stopped
 
 
