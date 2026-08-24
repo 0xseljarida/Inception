@@ -3580,7 +3580,7 @@ Sources:
 
 <br>
 
-**A Dockerfile alone cannot give a container this.** Metrics do not live in any container's filesystem, they live in the kernel, exposed through `/proc` and `/sys` on the host. So most of what makes this container work is in Compose, not in the Dockerfile.
+**Metrics do not live in any container's filesystem, they live in the kernel**, exposed through `/proc` and `/sys`. The surprise, covered below, is that a container can already read them without being given anything special, which is why this ends up being the simplest service in the project.
 
 ```dockerfile
 FROM debian:bookworm
@@ -3600,12 +3600,6 @@ ENTRYPOINT [ "netdata", "-D" ]
     build: ./requirements/bonus/netdata
     networks: [inception]
     ports: ["19999:19999"]
-    environment:
-      - NETDATA_HOST_PREFIX=/host
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /etc/os-release:/host/etc/os-release:ro
     restart: unless-stopped
 ```
 
@@ -3613,36 +3607,36 @@ ENTRYPOINT [ "netdata", "-D" ]
 
 <br>
 
-**Four things give it visibility, and the fourth is the one that is easy to forget:**
-
-| Mount or setting | What it does |
-|:--|:--|
-| `/proc:/host/proc:ro` | the host's real CPU, memory, and process counters, instead of the container's own namespaced view |
-| `/sys:/host/sys:ro` | the host's block devices, network interfaces, and hardware sensors |
-| `/etc/os-release:/host/etc/os-release:ro` | lets netdata name the host operating system correctly |
-| `NETDATA_HOST_PREFIX=/host` | tells netdata to read from `/host/proc` and `/host/sys` rather than its own |
-
-**Mounting without the prefix does nothing.** The mounts put the host's kernel interfaces inside the container, but netdata still reads `/proc` by default, which is its own. The environment variable is what redirects every read to the mounted copies. Both halves are required, and neither is useful alone.
-
-**All three mounts are read only.** netdata observes, it never writes to the host.
+**Five lines, and no mounts at all.** netdata's own documentation asks for the host's `/proc` and `/sys` to be bind mounted in, plus `NETDATA_HOST_PREFIX=/host` to redirect its reads there. This container does neither, because measuring showed that on a normal Docker host it changes nothing.
 
 <br>
 
 
 <details>
-<summary><b>Proof that it is really reading the host</b></summary>
+<summary><b>Measured: why this container needs no mounts</b></summary>
 
 <br>
 
-**A dashboard full of numbers is not evidence by itself**, because a container reading its own `/proc` would also produce a dashboard full of numbers. The check is to look for something the container provably does not have:
+**This started as an assumption, that the mounts plus the prefix are what make host wide metrics possible.** Testing it showed otherwise. Three variants of the same image, each given twelve seconds to settle, then asked for its chart list:
 
 ```text
-host has 8 cores          netdata charts:  cpu.cpu0 ... cpu.cpu7
-host disk is sda          netdata charts:  disk.sda
-host is a laptop          netdata charts:  powersupply.capacity  (BAT0)
+no mounts, no prefix     charts=257   battery=7   sda=5
+mounts, NO prefix        charts=257   battery=7   sda=5
+mounts + prefix          charts=257   battery=7   sda=5
 ```
 
-**The battery is the decisive one.** A container has no battery, no `BAT0`, and no `/sys/class/power_supply` of its own. Charting one is only possible by reading the host's `/sys`, which is exactly what the mount plus the prefix set up.
+**Identical.** The container charts the host's disk `sda` and the laptop battery `BAT0` even with no mounts and no environment variable at all.
+
+**The reason is that a container is far less isolated from the kernel's reporting interfaces than the word "namespace" suggests.** Docker gives every container a read only bind of the host's `sysfs`, so `/sys/class/power_supply` is already there. And most of `/proc` is not namespaced at all: the PID namespace changes which `/proc/<pid>` directories are listed, but `/proc/stat`, `/proc/meminfo`, and `/proc/uptime` still report the whole machine, because those files describe the kernel and there is only one kernel.
+
+```text
+namespaced          /proc/<pid>, /proc/net, the process list
+NOT namespaced      /proc/stat, /proc/meminfo, /proc/uptime, /proc/cpuinfo
+```
+
+**So they were removed.** Keeping configuration that demonstrably does nothing means keeping something that has to be explained and defended for no benefit, and every line in a Compose file is a line an evaluator can ask about. They would start to matter on a host that masks `/proc` and `/sys` more aggressively than Docker's default, which is the situation netdata's documentation is written against, and this is not that host.
+
+**The wider lesson is worth more than the setting.** A container is isolated in what it can *change*, far more than in what it can *see*.
 
 </details>
 
@@ -3767,7 +3761,7 @@ cat /sys/class/net/eth0/statistics/rx_bytes    counter maintained by the network
 cat /sys/class/power_supply/BAT0/capacity      value read from the battery controller
 ```
 
-**Bind mounting the host's `/proc` and `/sys` into the container, read only, is therefore not copying data.** It is giving the container a second door onto the same kernel interfaces, the host's ones rather than its own. Nothing is duplicated, and nothing goes stale, because every read still goes to the kernel.
+**Reading them from inside a container is therefore not reading a copy.** Every read still reaches the kernel and returns what is true at that instant, which is why no data is ever duplicated or stale, and why a container that can open these paths at all sees the real machine behind them.
 
 <br>
 
@@ -3789,7 +3783,7 @@ MAIN : Found 0 legacy dbengines, setting multidb diskspace to 256MB
 
 <br>
 
-**What this container costs the infrastructure, stated plainly for the defense:** read only access to the host's `/proc` and `/sys`, and one published port. It shares no namespace with the host, holds no capability beyond the default set, and cannot reach the Docker daemon. It can see the machine. It cannot touch it.
+**What this container costs the infrastructure, stated plainly for the defense:** one published port, and nothing else. No mount, no shared namespace, no capability beyond the default set, no access to the Docker daemon. What it sees, it sees because Docker gives every container that much already. It can see the machine. It cannot touch it.
 
 </details>
 
