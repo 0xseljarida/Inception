@@ -97,3 +97,138 @@ Line 15 ends with `chown -R www-data:www-data /var/www/html`. Who is `www-data`,
 But `RUN wp core download` runs during `docker build`, as root. So every downloaded WordPress file lands owned by root:root. Without the `chown -R www-data:www-data`, php-fpm workers can still read those files fine (world-readable), but can't write to them, no plugin installs, no core self-update, no file uploads to `wp-content/uploads`. It fails silently on writes only, which makes it an easy bug to miss until uploading media is attempted.
 
 </details>
+
+---
+
+# Networking
+
+---
+
+## 1. Port
+
+What is a port, and why does it exist at all if an IP address already identifies the machine?
+
+<details>
+<summary>Answer</summary>
+
+**A port is a 16-bit number identifying one endpoint of a connection inside a single machine.**
+
+The IP address gets a packet to the right machine. But a machine runs many programs that all want network traffic, so the port tells the kernel which one a packet belongs to.
+
+```text
+packet arrives at 172.18.0.6
+        │
+        ▼
+kernel reads the destination port
+        │
+        ├── 443   -> nginx
+        ├── 3306  -> mariadbd
+        └── 6379  -> redis-server
+```
+
+A port is not an object that exists on its own. It is a two-byte field in the TCP header, so the range is 0 to 65535. A process asks the kernel to reserve one with `bind()`, and the kernel then delivers packets carrying that number to that process.
+
+**IP address = the machine. Port = the program on it.**
+
+</details>
+
+---
+
+## 2. Connection
+
+What is a TCP connection?
+
+Answer given: *"a connection is when the browser talks to nginx, and nginx listens to the same port the browser talks to."*
+
+<details>
+<summary>Answer</summary>
+
+Half right, and the wrong half is the important one: **the two sides do not use the same port.**
+
+**A TCP connection is a two-way byte stream between two endpoints, identified by four values: source IP, source port, destination IP, destination port.**
+
+The server's port is fixed and known in advance. The client's port is a random high number the kernel picks at connect time, called an ephemeral port.
+
+```text
+browser  192.168.1.20:54321  ─────>  nginx  172.18.0.6:443
+         └── random, chosen at connect time    └── fixed, chosen by the server
+```
+
+The four values are what make a connection unique, which is why ten browser tabs can open ten connections to the same `:443`: they share three values and differ only in the client port.
+
+A connection is **state held in the kernel on both machines**, not an object travelling on the wire. It is created by a three-message handshake, after which each side tracks what it sent, what it received, and what the peer acknowledged.
+
+```text
+client                                server
+  │  SYN            ──────────────>     │   "I want to open a connection"
+  │  <──────────── SYN-ACK              │   "accepted"
+  │  ACK            ──────────────>     │   established, bytes can flow
+```
+
+</details>
+
+---
+
+## 3. Listening socket vs connection
+
+`ss -ltn` shows `0.0.0.0:443 LISTEN`. How is that different from the connection created when a request arrives?
+
+<details>
+<summary>Answer</summary>
+
+**A listening socket is not a connection.** It is a standing offer to accept them.
+
+Each accepted client produces a separate connection with its own four-tuple, while the listening socket stays open for the next one. One listening socket, many connections.
+
+This is also why `bind to = 0.0.0.0` mattered for netdata in § 13 e: binding decides which interfaces the listening socket will accept arrivals on, before any connection exists.
+
+</details>
+
+---
+
+## 4. Why the asymmetry
+
+Why must the browser know nginx's port in advance, while nginx does not need to know the browser's?
+
+Answer given: *"because the browser is the client, it sends the request and nginx responds to that port."*
+
+<details>
+<summary>Answer</summary>
+
+Correct. Sharpened: nginx is not *told* the client's port, it **reads it from the header of the SYN packet that arrived**, and replies to that.
+
+The general rule:
+
+```text
+the side that connects   needs the peer's address and port in advance
+the side that listens    learns the peer's address and port on arrival
+```
+
+</details>
+
+---
+
+## 5. Why FTP breaks that rule
+
+FTP uses two TCP connections, not one. What are they, and why does that asymmetry become a problem?
+
+<details>
+<summary>Answer</summary>
+
+```text
+control connection   stays open for the whole session, carries only text commands
+data connection      opened fresh for each transfer, carries the file bytes, then closes
+```
+
+The problem is who opens the second one.
+
+```text
+active mode    server ──connects to──> client    client says "call me back on port N"
+passive mode   client ──connects to──> server    server says "call me on port N"
+```
+
+**Active mode inverts the roles**: the client must become the listener, and the server must be told which port to reach it on. Behind NAT or a firewall, nothing outside can reach that port, so the transfer fails while the control connection still looks healthy.
+
+That is why passive mode is the default in practice, and it is the reason a containerised FTP server needs both `pasv_address` and a fixed, published passive port range.
+
+</details>
