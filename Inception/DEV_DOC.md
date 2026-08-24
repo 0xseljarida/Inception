@@ -298,11 +298,15 @@ including inside the entrypoints.
   Copy the directory, not `srcs/*`, since the glob flattens subdirectories: with
   `srcs/*` a file at `srcs/css/style.css` lands at `/var/www/static/style.css`
   and every stylesheet link returns 404.
-- **netdata** needs both the host mounts and `NETDATA_HOST_PREFIX=/host`. The
-  mounts alone do nothing, because netdata still reads its own `/proc` unless the
-  prefix redirects it. Its config file must also carry `run as user = netdata`,
-  since `COPY` replaces the packaged file wholesale and the internal fallback
-  user, `nobody`, cannot write `/var/lib/netdata`.
+- **netdata** declares no mounts and no environment variables, which is
+  deliberate. Its own documentation asks for the host's `/proc` and `/sys` to be
+  bind mounted in with `NETDATA_HOST_PREFIX=/host`, but measuring on this host
+  showed the identical 257 charts, including the host disk and the laptop
+  battery, with and without them. Docker already bind mounts the host's `sysfs`
+  into every container, and `/proc/stat`, `/proc/meminfo` and `/proc/uptime` are
+  not namespaced, so the data was never hidden. Its config file must carry
+  `run as user = netdata`, since `COPY` replaces the packaged file wholesale and
+  the internal fallback user, `nobody`, cannot write `/var/lib/netdata`.
 - **netdata is deliberately host-wide, not per container.** Breaking metrics down
   per container requires mounting `/var/run/docker.sock` and setting `pid: host`,
   which are the two heaviest privileges available in a Compose file: a writable
