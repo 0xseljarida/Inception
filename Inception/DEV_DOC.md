@@ -121,10 +121,17 @@ built with a bare `docker build`.
 ```text
 make
  └── docker compose -f srcs/docker-compose.yml up -d --build
-      ├── build ./requirements/mariadb    -> image mariadb:1.0
-      ├── build ./requirements/wordpress  -> image wordpress:1.0
-      └── build ./requirements/nginx      -> image nginx:1.0
+      ├── build ./requirements/mariadb          -> image mariadb:1.0
+      ├── build ./requirements/wordpress        -> image wordpress:1.0
+      ├── build ./requirements/nginx            -> image nginx:1.0
+      ├── build ./requirements/bonus/redis      -> image redis:1.0
+      ├── build ./requirements/bonus/adminer    -> image adminer:1.0
+      ├── build ./requirements/bonus/resume     -> image resume:1.0
+      └── build ./requirements/bonus/netdata    -> image netdata:1.0
 ```
+
+Three services are mandatory and four are bonus. Every one of them is built from
+its own Dockerfile on `debian:bookworm`, and no image is pulled ready made.
 
 ### Makefile targets
 
@@ -163,10 +170,20 @@ the volumes were written by the container users, `mysql` (uid 999) and
 
 ### Build order and caching
 
-Compose builds all three services, then starts them in `depends_on` order:
-mariadb, then wordpress, then nginx. `depends_on` waits for the container to be
-*started*, not for the service inside it to be *ready*, which is why the
-WordPress entrypoint polls the MariaDB port itself before doing anything.
+Compose builds all seven services, then starts them in `depends_on` order:
+
+```text
+mariadb, redis  ->  wordpress, adminer  ->  nginx
+resume, netdata     (no dependencies, started whenever Compose reaches them)
+```
+
+nginx comes last because it resolves both `fastcgi_pass wordpress:9000` and
+`fastcgi_pass adminer:9000` when it parses its configuration, and refuses to
+start if either name does not exist yet.
+
+`depends_on` waits for the container to be *started*, not for the service inside
+it to be *ready*, which is why the WordPress entrypoint polls the MariaDB port
+itself before doing anything.
 
 Layer caching follows Dockerfile order: a changed `COPY` invalidates every layer
 after it. In the nginx Dockerfile, the certificate `RUN` is the expensive step,
@@ -258,6 +275,41 @@ including inside the entrypoints.
   every connection.
 - There is no init system in a container, so nothing recreates `/run`. The
   MariaDB entrypoint has to `mkdir -p /run/mysqld` and chown it itself.
+
+### The bonus services
+
+- **redis** runs with no configuration file at all. `redis-server` reads
+  `/etc/redis/redis.conf` only when the path is passed as its first argument, so
+  giving none makes it start from built-in defaults, which is what avoids the
+  packaged `daemonize yes` and `bind 127.0.0.1`. The cache policy is set on the
+  command line instead: `--maxmemory 256mb --maxmemory-policy allkeys-lru`.
+- **The WordPress side of redis** is three commands in the entrypoint, inside the
+  first-boot guard and after `wp core install`: install and activate the
+  `redis-cache` plugin, set `WP_REDIS_HOST`, then `wp redis enable`, which writes
+  the `wp-content/object-cache.php` drop-in. Running them before `wp core install`
+  fails with `Error: The site you have requested is not installed.`
+- **adminer** is a single PHP file served by php-fpm, with no web server of its
+  own. The mandatory nginx routes to it with `location ^~ /adminer/`. The `^~`
+  matters: nginx checks regex locations before prefix ones, so without it
+  `/adminer/index.php` would match `location ~ \.php$` and be sent to the
+  WordPress container instead.
+- **resume** bakes its files into the image with `COPY ./srcs/ /var/www/static`
+  rather than mounting a volume, because a static site has no runtime state.
+  Copy the directory, not `srcs/*`, since the glob flattens subdirectories: with
+  `srcs/*` a file at `srcs/css/style.css` lands at `/var/www/static/style.css`
+  and every stylesheet link returns 404.
+- **netdata** needs both the host mounts and `NETDATA_HOST_PREFIX=/host`. The
+  mounts alone do nothing, because netdata still reads its own `/proc` unless the
+  prefix redirects it. Its config file must also carry `run as user = netdata`,
+  since `COPY` replaces the packaged file wholesale and the internal fallback
+  user, `nobody`, cannot write `/var/lib/netdata`.
+- **netdata is deliberately host-wide, not per container.** Breaking metrics down
+  per container requires mounting `/var/run/docker.sock` and setting `pid: host`,
+  which are the two heaviest privileges available in a Compose file: a writable
+  Docker socket is effectively root on the host, and `:ro` does not restrain it,
+  since a socket is used by sending on it rather than by writing the file. That
+  cost was not worth a cosmetic gain, so the feature was dropped and the container
+  keeps only read-only access to `/proc` and `/sys`.
 
 ---
 
