@@ -1,0 +1,8 @@
+# Credentials. Never commit these.
+# Recreate them from DEV_DOC.md, section "Recreate the secrets".
+secrets/
+
+# Editor and OS noise
+.DS_Store
+*.swp
+*~
