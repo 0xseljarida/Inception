@@ -3351,6 +3351,9 @@ Sources:
 <p align="center"><img src="assets/File-Transfer-Protocol-and-HTTPS.gif" width="500"></p>
 <p align="center"><i>two channels · one carries the commands, the other carries the bytes</i></p>
 
+<h3 align="center">Purpose of the container</h3>
+<p align="center"><b>It lets a client upload files to, and fetch files from, the WordPress volume.</b></p>
+
 > **FTP is an application layer protocol for transferring files between hosts, in which a client and a server exchange commands and replies over one TCP connection, and transfer file contents over a second, separate TCP connection.**
 
 <details>
