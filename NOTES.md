@@ -3348,7 +3348,207 @@ Sources:
 <summary><h2>d · FTP server</h2></summary>
 
 
-**To be written.**
+<p align="center"><img src="assets/File-Transfer-Protocol-and-HTTPS.gif" width="500"></p>
+<p align="center"><i>two channels · one carries the commands, the other carries the bytes</i></p>
+
+> **FTP is an application layer protocol for transferring files between hosts, in which a client and a server exchange commands and replies over one TCP connection, and transfer file contents over a second, separate TCP connection.**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> Set up a FTP server container pointing to the volume of your WordPress website.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**RFC 959 states four objectives:** promote the sharing of files, encourage indirect use of remote computers by programs, shield the user from differences between file storage systems, and transfer data reliably and efficiently.
+
+**It does four things:**
+
+* **Authenticates a user**, with `USER` and `PASS`.
+* **Navigates a remote filesystem**, with `CWD`, `PWD`, `LIST`, `MKD`, `DELE`.
+* **Transfers file contents**, with `RETR` to download and `STOR` to upload.
+* **Reports every outcome as a three digit reply code**, `230` logged in, `550` file unavailable.
+
+<br>
+
+**The one structural fact that explains everything else is the connection split.**
+
+```text
+client                                  server
+  │                                       │
+  │──── TCP, port 21 ────────────────────►│   CONTROL connection
+  │      USER, PASS, LIST, RETR, STOR     │   commands and replies, plain text
+  │◄──── 220, 331, 230, 227, 150, 226 ────│   stays open for the whole session
+  │                                       │
+  │══════ a second TCP connection ═══════ │   DATA connection
+  │        file bytes, listing bytes      │   opened per transfer, then closed
+```
+
+**RFC 959 defines the control connection as the path for commands and replies, following the Telnet protocol, and the data connection as a full duplex connection over which data is transferred.** No file content ever travels on port 21, and no command ever travels on the data connection.
+
+**The reply codes are structured, not arbitrary.** The first digit is the outcome class, `1` preliminary, `2` success, `3` more input needed, `4` temporary failure, `5` permanent failure. The second digit is the category, where `x2z` concerns the connections and `x5z` the filesystem.
+
+**Why split them at all?** Because the control connection has to stay responsive during a transfer. On a single connection the bytes of a large file would fill the stream, and no abort could be sent nor status received until it finished.
+
+<br>
+
+
+<details>
+<summary><b>Active mode and passive mode</b></summary>
+
+<br>
+
+**The split raises one question: who opens the second connection?** FTP answers it twice, and the two answers are the whole reason FTP is awkward on modern networks.
+
+**The prerequisite is the asymmetry of TCP:** the side that connects needs the peer's address and port in advance, the side that listens learns them on arrival.
+
+<p align="center"><img src="assets/ftp_active_passive.png" width="520"></p>
+<p align="center"><i>active inverts the roles for the data channel · passive keeps both connections pointing at the server</i></p>
+
+```text
+ACTIVE  (PORT)                          PASSIVE  (PASV)
+
+client: PORT 10,0,0,7,195,80            client: PASV
+  "call me back at 10.0.0.7:50000"        "you listen, tell me where"
+
+                                        server: 227 Entering Passive Mode
+                                                (10,0,0,5,195,80)
+
+server ──────────────► client           client ──────────────► server
+
+the SERVER opens the data connection    the CLIENT opens the data connection
+```
+
+**The port number is encoded as two decimal bytes.** In `195,80` the real port is `195 * 256 + 80 = 50000`. The same six field format is used by `PORT` and by the `227` reply.
+
+**Active mode was the default in 1985 and it fails today.** It inverts the roles: the client becomes the listener, and the server must reach it. An inbound connection to a random high port on the client is refused by every stateful firewall, and is undeliverable once the client sits behind NAT. The failure is quiet, because the control connection stays healthy while the transfer hangs.
+
+**Passive mode restores the normal direction**, which is why every modern client defaults to it. RFC 959 defines it with `PASV`, telling the server to listen on a non default port and "wait for a connection rather than initiate one upon receipt of a transfer command".
+
+**RFC 1579, "Firewall-Friendly FTP", 1994, recommended it as the fix.** Its argument is that a packet filter can safely allow outbound calls while inbound calls to arbitrary high ports are dangerous, and that no protocol change is needed because `PASV` already exists. The cost moves to the server, which must now accept connections on a range of high ports.
+
+**RFC 2428, 1998, replaced both commands with `EPRT` and `EPSV`**, to carry address families other than IPv4 and to work better through NAT. `EPSV` returns only a port number, and the client reuses the address it is already connected to.
+
+</details>
+
+
+<details>
+<summary><b>History, older than TCP/IP</b></summary>
+
+<br>
+
+**FTP predates the protocol stack it now runs on.** The first specification was written by A. Bhushan at MIT Project MAC and published as RFC 114 on 16 April 1971, for ARPANET hosts running NCP, the predecessor of TCP/IP.
+
+| Year | Document | What it did |
+|:--|:--|:--|
+| 1971 | RFC 114 | first file transfer protocol, over NCP, from MIT |
+| 1973 | RFC 542 | new official specification after several rounds of revision |
+| 1980 | RFC 765 | rewritten for TCP after the NCP to TCP transition |
+| 1985 | **RFC 959** | **the current specification**, still normative today |
+| 1994 | RFC 1579 | recommends that clients use `PASV`, for firewalls |
+| 1997 | RFC 2228 | security extensions, `AUTH`, `PBSZ`, `PROT` |
+| 1998 | RFC 2428 | `EPRT` and `EPSV`, for IPv6 and NAT |
+| 2005 | RFC 4217 | how to apply TLS to FTP, which is FTPS |
+
+**RFC 959 is a consolidation, not an invention.** It describes its own lineage across RFCs 114, 172, 265, 354, 454, 542 and 765, and states that it corrects documentation errors, improves explanations, and adds optional commands while remaining compatible with RFC 765.
+
+**The problem RFC 114 set out to solve explains the odd parts of the protocol.** It describes the need for indirect use of remote computers, with users "shielded from the variations in file and storage systems of different host computers". In 1971 machines disagreed about line endings, character encodings, and whether a file was a stream of bytes at all, which is why FTP still carries commands for type, mode, and structure that nobody uses today.
+
+**One decision from that era still shapes it.** Sessions were between trusted hosts on a research network, so credentials travel as plain text, and RFC 959 notes only that hiding the password from the local screen is the client's responsibility.
+
+</details>
+
+
+<details>
+<summary><b>FTP, FTPS and SFTP are three different things</b></summary>
+
+<br>
+
+**The names are similar and the protocols are not related.**
+
+| | What it is | Transport |
+|:--|:--|:--|
+| **FTP** | RFC 959, plain text | TCP 21 plus a data connection |
+| **FTPS** | the same FTP, wrapped in TLS by RFC 4217 | TCP 21, upgraded with `AUTH TLS` |
+| **SFTP** | a subsystem of SSH, unrelated to RFC 959 | TCP 22, one connection only |
+
+**FTPS is FTP plus a handshake.** RFC 4217 describes how `AUTH`, `PBSZ`, `PROT` and `CCC` from RFC 2228 negotiate TLS, first on the control connection, then optionally on the data connection.
+
+**SFTP shares no code, no commands and no reply codes with FTP.** It is file transfer carried inside an SSH session, which is why it needs a single connection and no passive port range.
+
+**In this project the distinction is not academic.** nginx terminates TLS for the website, but this container is plain FTP, so the password an FTP client sends crosses the network unencrypted.
+
+</details>
+
+<br>
+
+**What this container is for.** The subject points it at the WordPress volume, so FTP becomes a third way into `/var/www/html`, next to php-fpm and nginx.
+
+```text
+              named volume: the WordPress files
+              /home/sel-jari/data/wordpress
+                          │
+        ┌─────────────────┼─────────────────┐
+        ▼                 ▼                 ▼
+      nginx           wordpress            ftp
+  /var/www/html    /var/www/html     /var/www/html
+  reads .css .js   executes .php     uploads and downloads
+```
+
+**A file uploaded through FTP lands in the directory php-fpm executes and nginx serves.** That is the demonstration at the defense: upload a file, then reach it through the website.
+
+<br>
+
+
+<details>
+<summary><b>What the container will have to solve</b></summary>
+
+<br>
+
+**The daemon is vsftpd, the Very Secure FTP Daemon**, at version `3.0.3-13+b2` in Debian 12 bookworm, measured with `dpkg-query` in a throwaway container.
+
+**Its defaults are hostile to this use case, and every one of them is deliberate.** Measured from `vsftpd.conf(5)` on that same version:
+
+| Option | Default | Why it blocks us |
+|:--|:--|:--|
+| `listen` | `NO` | nothing listens at all, the daemon expects to be launched by inetd |
+| `local_enable` | `NO` | no login by a real system user is possible |
+| `write_enable` | `NO` | `STOR`, `DELE`, `MKD` and `RNTO` are all refused, so the login works and the upload does not |
+| `anonymous_enable` | `NO` | already what we want, worth keeping explicit |
+| `chroot_local_user` | `NO` | the session is not confined to the WordPress tree |
+| `pasv_min_port` | `0`, any port | the server may pick any high port, so no fixed range can be published |
+| `pasv_address` | none, taken from the incoming connected socket | inside a container that address is `172.18.0.x`, which the client cannot reach |
+| `background` | `NO` | already correct: vsftpd stays in the foreground, so it can be PID 1 |
+
+**Three problems follow from that table, and they are the actual work.**
+
+**1. The passive port range must be fixed and published under identical numbers.** A published port is a NAT rule, and FTP announces port numbers inside its own replies, so a range mapped to different host ports would have the server advertise one number while the client reaches another.
+
+**2. The advertised address must be overridden.** `pasv_address` exists precisely for this, and without it the server hands the client an address on the Docker bridge network.
+
+**3. Ownership has to line up with php-fpm.** Workers run as `www-data`, UID 33, and own `/var/www/html` as § 09 b explains. An FTP user outside that group can log in and list files, while every upload is refused by the kernel rather than by vsftpd.
+
+> ⚠️ **One option needed here is undocumented.** `chroot_local_user` makes vsftpd 3 refuse a session whose jail root is writable, answering `500 OOPS: vsftpd: refusing to run with writable root inside chroot()`. The tunable that waives it, `allow_writeable_chroot`, appears in the compiled binary but not in `vsftpd.conf(5)`, and neither does `seccomp_sandbox`. Both verified by grepping `/usr/sbin/vsftpd` and the man page on the `3.0.3` that Debian 12 ships.
+
+**Two directories will not exist**, for the reason § 07 b gives about `/run/mysqld`: there is no init system in a container, and `/run` is a tmpfs no package may ship files into.
+
+```text
+/var/run/vsftpd/empty    the secure_chroot_dir, must exist and be empty
+/var/www/html            the mount point for the WordPress volume
+```
+
+**The implementation is written below as it is built.**
+
+Sources:
+* https://www.rfc-editor.org/rfc/rfc959.txt
+* https://www.rfc-editor.org/rfc/rfc114.txt
+* `vsftpd.conf(5)` and `/usr/sbin/vsftpd`, Debian 12, vsftpd 3.0.3-13+b2
+
+</details>
 
 </details>
 
