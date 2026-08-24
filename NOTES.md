@@ -3360,7 +3360,7 @@ Sources:
 <summary><h2>e · The service of my choice</h2></summary>
 
 
-> **netdata is a monitoring agent: it reads system and container metrics directly from the kernel and from Docker, and serves them as a live dashboard, with no configuration and no external database.**
+> **netdata is a monitoring agent: it reads system metrics straight out of the kernel and serves them as a live dashboard, with no configuration, no agent to install elsewhere, and no external database.**
 
 <details>
 <summary><b>Proof from the subject</b></summary>
@@ -3373,11 +3373,11 @@ Sources:
 
 </details>
 
-**Justification for the defense:** every other container in this project is invisible once it is running. `docker ps` says `Up`, but says nothing about CPU, memory, or whether a container is quietly starving another. netdata answers that in real time, for the whole stack, from one container.
+**Justification for the defense, in one sentence:** the whole stack is invisible once it is running, because `docker ps` says `Up` and nothing else, so netdata answers the question that actually matters when something is slow, which is what the machine is doing with its CPU, memory, disk, and network right now.
 
 <br>
 
-**A Dockerfile alone cannot give a container this.** Metrics live outside any container's own filesystem, in `/proc`, `/sys`, and inside the Docker daemon, so what makes this container work is almost entirely in Compose, not the Dockerfile.
+**A Dockerfile alone cannot give a container this.** Metrics do not live in any container's filesystem, they live in the kernel, exposed through `/proc` and `/sys` on the host. So most of what makes this container work is in Compose, not in the Dockerfile.
 
 ```dockerfile
 FROM debian:bookworm
@@ -3397,66 +3397,59 @@ ENTRYPOINT [ "netdata", "-D" ]
     build: ./requirements/bonus/netdata
     networks: [inception]
     ports: ["19999:19999"]
+    environment:
+      - NETDATA_HOST_PREFIX=/host
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /etc/os-release:/host/etc/os-release:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    pid: host
     restart: unless-stopped
 ```
 
-**`-D` keeps it in the foreground**, the same reason every daemon in this project needs a flag like it: without it netdata forks to the background and PID 1 exits.
+**`-D` keeps it in the foreground**, for the same reason every other daemon in this project needs a flag like it: without it netdata forks, the parent exits, and PID 1 is gone.
 
 <br>
 
-**Four things give it visibility, and each one answers a different question:**
+**Four things give it visibility, and the fourth is the one that is easy to forget:**
 
-| Mount / setting | What it lets netdata see |
+| Mount or setting | What it does |
 |:--|:--|
-| `/proc:/host/proc:ro` | CPU, memory, and per process stats, read from the real host, not the container's own namespaced view |
-| `/sys:/host/sys:ro` | disk and network device counters |
-| `/var/run/docker.sock:ro` | the list of running containers and their resource usage, by asking the daemon directly |
-| `pid: host` | puts this container in the host's PID namespace, so its own process table matches the host's, needed for accurate per process attribution |
+| `/proc:/host/proc:ro` | the host's real CPU, memory, and process counters, instead of the container's own namespaced view |
+| `/sys:/host/sys:ro` | the host's block devices, network interfaces, and hardware sensors |
+| `/etc/os-release:/host/etc/os-release:ro` | lets netdata name the host operating system correctly |
+| `NETDATA_HOST_PREFIX=/host` | tells netdata to read from `/host/proc` and `/host/sys` rather than its own |
 
-**All four are read only**, `:ro`. netdata only observes.
+**Mounting without the prefix does nothing.** The mounts put the host's kernel interfaces inside the container, but netdata still reads `/proc` by default, which is its own. The environment variable is what redirects every read to the mounted copies. Both halves are required, and neither is useful alone.
+
+**All three mounts are read only.** netdata observes, it never writes to the host.
 
 <br>
 
-**Two failures were hit building this container, and both are worth keeping.**
 
 <details>
-<summary><b>Bug 1 · `/proc/1/comm` is not a valid PID 1 check here</b></summary>
+<summary><b>Proof that it is really reading the host</b></summary>
 
 <br>
 
-**The instinct was to check PID 1 the way every other container in this project was checked:**
+**A dashboard full of numbers is not evidence by itself**, because a container reading its own `/proc` would also produce a dashboard full of numbers. The check is to look for something the container provably does not have:
 
-```bash
-docker exec srcs-netdata-1 cat /proc/1/comm
+```text
+host has 8 cores          netdata charts:  cpu.cpu0 ... cpu.cpu7
+host disk is sda          netdata charts:  disk.sda
+host is a laptop          netdata charts:  powersupply.capacity  (BAT0)
 ```
 
-This printed `systemd`, which looked like the entrypoint had failed. It had not.
-
-**`pid: host` shares the entire PID namespace with the host.** Once that is set, `/proc/1` inside the container is the host's real init process, not this container's own process. The check that works everywhere else in this project stops meaning anything the moment `pid: host` is added.
-
-**The real check is what Docker itself considers the container's main process:**
-
-```bash
-docker inspect srcs-netdata-1 --format '{{.Path}} {{.Args}}  Pid={{.State.Pid}}'
-# netdata [-D]  Pid=76729
-```
-
-That confirmed the entrypoint was correct the whole time. The apparent failure was a wrong test, not a wrong container.
+**The battery is the decisive one.** A container has no battery, no `BAT0`, and no `/sys/class/power_supply` of its own. Charting one is only possible by reading the host's `/sys`, which is exactly what the mount plus the prefix set up.
 
 </details>
 
+
 <details>
-<summary><b>Bug 2 · overriding one setting silently dropped another</b></summary>
+<summary><b>Bug · overriding one setting silently dropped another</b></summary>
 
 <br>
 
-**netdata's default web port, 19999, is unreachable from outside the container by design.** The Debian package ships:
+**netdata's default web port, 19999, is unreachable from outside the container by design.** The Debian package ships this, with the reasoning written next to it:
 
 ```ini
 [global]
@@ -3465,16 +3458,16 @@ That confirmed the entrypoint was correct the whole time. The apparent failure w
 	# networks. See https://github.com/netdata/netdata/issues/164
 ```
 
-**Binding to `127.0.0.1` means the socket only accepts connections arriving on loopback**, the interface reachable only from inside that same network namespace. A container's published port maps to its real interface, `eth0`, not to its loopback, so a service bound to `127.0.0.1` is unreachable through `ports:` no matter what is published. `0.0.0.0` is the wildcard address meaning every interface, which is what makes the port actually answer once published.
+**Binding to `127.0.0.1` means the kernel only delivers packets that arrived on loopback**, the interface reachable only from inside that same network namespace. A published port maps to the container's real interface, `eth0`, never to its loopback, so a process bound to `127.0.0.1` cannot be reached through `ports:` no matter what is published. `0.0.0.0` is the wildcard meaning every interface, which is what makes a published port actually answer.
 
-**The fix looked like this:**
+**So the fix was one line:**
 
 ```ini
 [web]
     bind to = 0.0.0.0
 ```
 
-**Writing only that broke the container completely**, because `COPY` replaces the whole file, not one line. `run as user = netdata`, which lived under `[global]` in the packaged file, was gone. `strace` on the process showed why:
+**Writing only that line broke the container completely**, because `COPY` replaces the whole file rather than merging into it. `run as user = netdata`, which lived under `[global]` in the packaged file, disappeared with it. `strace` on the process showed the consequence exactly:
 
 ```text
 setgid(65534)                               nogroup
@@ -3482,9 +3475,11 @@ setuid(65534)                               nobody, not netdata (999)
 mkdir("/var/lib/netdata/registry", 0770) = -1 EACCES
 ```
 
-**Without an explicit `run as user`, netdata's own internal fallback is `nobody`**, uid 65534, which owns nothing under `/var/lib/netdata`. The daemon printed a clean `FATAL` in its own log and exited, invisible in `docker logs` because netdata writes that specific line to `/var/log/netdata/error.log`, not stdout, and the container was already restarting every few seconds under `restart: unless-stopped` before the log could be read at leisure.
+**With no explicit `run as user`, netdata's internal fallback is `nobody`**, uid 65534, which owns nothing under `/var/lib/netdata`. The daemon wrote a clean `FATAL` line and exited.
 
-**The working config restores both settings**, since a minimal override still has to be complete for the values it does not intend to change:
+**Two things made that failure hard to see.** netdata writes that line to `/var/log/netdata/error.log` and not to stdout, so `docker logs` showed only cheerful startup messages, and `restart: unless-stopped` kept recreating the container underneath every attempt to look inside it.
+
+**The working config restores both settings**, which is the general lesson: a file that replaces a packaged file has to carry every value it does not intend to change, not only the one it does.
 
 ```ini
 [global]
@@ -3496,58 +3491,102 @@ mkdir("/var/lib/netdata/registry", 0770) = -1 EACCES
 
 </details>
 
+
+<details>
+<summary><b>Scope decision · per container graphs were attempted and dropped</b></summary>
+
 <br>
 
-**Verified on the running stack:**
+**netdata can also break metrics down per container**, one CPU chart for wordpress, another for mariadb, by reading cgroups and asking the Docker daemon for the names behind them. Getting that working needed considerably more than the dashboard itself:
+
+```yaml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    pid: host
+```
+
+**Plus an entrypoint script**, because the socket is owned by `root` and a group that the `netdata` user does not belong to, so the container had to look up that group at runtime and join it. Plus `curl` in the image, because netdata's container naming script shells out to it. Even with all of that in place, the per container charts never appeared.
+
+**It was removed rather than pursued**, for three reasons worth being able to say out loud:
+
+| Reason | |
+|:--|:--|
+| the subject does not ask for it | it asks for a useful service, justified at the defense, and host wide monitoring is already that |
+| the cost is real isolation | `pid: host` and the Docker socket would have been the two heaviest privileges in the whole Compose file, for a cosmetic gain |
+| every extra moving part is a thing that can break during a defense | an entrypoint, a runtime group lookup, and an extra package, all to add graphs nobody asked for |
+
+**One false alarm from that attempt is worth keeping**, because it will happen again to anyone who adds `pid: host` to a container:
+
+```bash
+docker exec srcs-netdata-1 cat /proc/1/comm
+# systemd
+```
+
+**That looked like the entrypoint had failed. It had not.** `pid: host` shares the host's entire PID namespace, so `/proc/1` inside the container becomes the host's real init process. The PID 1 check that is correct for every other container in this project silently stops meaning anything the moment that setting is added, and the check that still works is to ask Docker what it considers the main process:
+
+```bash
+docker inspect srcs-netdata-1 --format '{{.Path}} {{.Args}}'
+# netdata [-D]
+```
+
+**With `pid: host` gone, `/proc/1/comm` reports `netdata` again**, and the same check now works uniformly across all seven containers.
+
+</details>
+
+<br>
+
+**Verified on a cold boot**, from an empty `/home/sel-jari/data` with every image rebuilt:
 
 ```text
 resume 200   wordpress 200   wp-admin 302   adminer 200   netdata 200
 restarts: 0 on all seven containers
-netdata process: netdata [-D], running as uid 999 (netdata)
+
+PID 1:  mariadbd, php-fpm8.2, nginx, nginx, php-fpm8.2, redis-server, netdata
 ```
 
 <br>
 
 
 <details>
-<summary><b>DEEPDIVE · how netdata actually sees what it sees</b></summary>
+<summary><b>DEEPDIVE · how netdata sees what it sees</b></summary>
 
 <br>
 
-**A normal process only knows what its own namespaces show it.** A container's `/proc` is not a copy of the host's, it is a view the kernel generates that only lists the processes inside that container's own PID namespace, and its network interfaces are the ones inside its own network namespace. That isolation is the entire point of a container, covered in § 02, and it is exactly what has to be worked around to build a monitoring agent, because a monitor is only useful if it can see everything, not just itself.
+**A process only knows what its own namespaces show it.** A container's `/proc` is not a copy of the host's, it is a view the kernel generates that lists only the processes inside that container's PID namespace, and the interfaces it shows are the ones in its own network namespace. That isolation is the entire point of a container, as § 02 covers, and it is precisely what a monitoring agent has to be given a way around, because a monitor that can only see itself is useless.
 
 <br>
 
-**`/proc` and `/sys` are not files on disk, they are interfaces the kernel exposes at runtime.** Reading `/proc/stat` does not read bytes someone wrote, it asks the kernel scheduler for the CPU counters it is tracking right now, formatted as text. `/sys` exposes the same idea for devices: every block device, network interface, and thermal sensor has a directory there, generated live.
+**`/proc` and `/sys` are not files on disk, they are interfaces the kernel exposes at runtime.** Reading `/proc/stat` does not read bytes that someone wrote earlier, it asks the scheduler for the counters it is maintaining right now and gets them formatted as text on the spot. `/sys` does the same for devices: every block device, network interface, thermal sensor, and battery has a directory there, generated live.
 
 ```text
-cat /proc/meminfo         kernel formats memory accounting on every read
+cat /proc/meminfo                              kernel formats memory accounting on every read
 cat /sys/class/net/eth0/statistics/rx_bytes    counter maintained by the network driver
+cat /sys/class/power_supply/BAT0/capacity      value read from the battery controller
 ```
 
-**Bind mounting the host's `/proc` and `/sys` into the container**, read only, means netdata's reads of `/host/proc/stat` return the host kernel's real counters, for every process on the machine, not just the ones inside netdata's own container.
+**Bind mounting the host's `/proc` and `/sys` into the container, read only, is therefore not copying data.** It is giving the container a second door onto the same kernel interfaces, the host's ones rather than its own. Nothing is duplicated, and nothing goes stale, because every read still goes to the kernel.
 
 <br>
 
-**The Docker socket is a different kind of access: it is not a filesystem, it is dockerd's API.** `/var/run/docker.sock` is a Unix socket, and anything that can write to it can send it the same HTTP requests the `docker` CLI sends, listing containers, reading their resource usage, even starting and stopping them. Mounting it read only into netdata does not make the API read only, `:ro` only affects the socket file's permissions inside the container, not what the daemon allows once a request arrives. netdata only ever issues read requests, `GET /containers/json` and similar, but the socket itself grants far more than that. This is the single most sensitive line in the whole project's Compose file, and it is why the container gets no other privilege: no extra Linux capabilities, no `privileged: true`, nothing beyond what these four mounts and `pid: host` grant.
+**The two privileges that were tried and removed are worth understanding anyway**, because they come up constantly in real infrastructure and both are commonly pasted into Compose files without a second thought.
+
+**`/var/run/docker.sock` is not a filesystem, it is the Docker daemon's API.** Anything that can write to that socket can send the daemon the same HTTP requests the `docker` command sends: list containers, read their stats, and also create containers, mount any host path into them, and run them as root. Mounting it `:ro` does not make the API read only, it only makes the socket file itself read only inside the container, and a socket is written by sending on it, not by writing the file. So `:ro` on a Docker socket buys close to nothing. This is why removing it mattered more than the graphs it would have enabled: it is effectively root on the host, handed to one container.
+
+**`pid: host` shares exactly one namespace, and only one.** Namespaces are independent of each other, so sharing the PID namespace does not share the network namespace, which is why netdata still needed `bind to = 0.0.0.0` even while `pid: host` was set. What it changes is that `/proc/<pid>` inside the container enumerates the host's real processes under the host's real PIDs, which is what would let a monitor attribute CPU to the right process instead of seeing only its own.
 
 <br>
 
-**`pid: host` is the one namespace actually being shared, and only that one.** Namespaces are independent of each other: sharing the PID namespace does not share the network namespace, which is exactly why netdata still needed `bind to = 0.0.0.0` even after `pid: host` was set. The container still has its own `eth0` and its own loopback, unaffected by which PID namespace it is in. `pid: host` only changes one thing: `/proc/<pid>` inside the container enumerates the host's real processes with the host's real PIDs, which is what lets netdata attribute CPU and memory to the correct process instead of only seeing its own single process tree.
-
-<br>
-
-**Once metrics are collected, they never touch a database.** netdata's per second samples live in a fixed size ring buffer in RAM, `dbengine`, which is why the very first log line every run prints is about disk space for that buffer, `multidb diskspace to 256MB`, measured on this container:
+**Once collected, metrics never reach a database.** netdata's per second samples live in a fixed size ring buffer in RAM, `dbengine`, which is why the first thing it logs on every start is how much space that buffer may use:
 
 ```text
 MAIN : Found 0 legacy dbengines, setting multidb diskspace to 256MB
 ```
 
-**No volume is declared for this container**, and that is a deliberate consequence of the ring buffer design, not an oversight: old samples are simply overwritten as new ones arrive, so losing the container's writable layer on a restart costs only the last few hours of history, nothing structural. This mirrors the redis container in § c: both hold data that is entirely disposable, for the same reason, neither is a source of truth.
+**No volume is declared for this container, and that follows from the ring buffer rather than being an oversight.** Old samples are overwritten as new ones arrive, so losing the writable layer on a restart costs a few hours of history and nothing structural. It is the same reasoning as the redis container in § c: both hold data that is a disposable copy, neither is a source of truth, so neither gets a volume.
 
 <br>
 
-**One thing this container cannot promise, which is worth stating plainly for the defense:** `pid: host` and the Docker socket mount are both real reductions in isolation, on the one container that carries them. Nothing else in the stack shares any namespace with the host, and this container publishes only its own dashboard port. The trade is deliberate: full visibility for one purpose built monitoring container, in exchange for a smaller blast radius everywhere else.
+**What this container costs the infrastructure, stated plainly for the defense:** read only access to the host's `/proc` and `/sys`, and one published port. It shares no namespace with the host, holds no capability beyond the default set, and cannot reach the Docker daemon. It can see the machine. It cannot touch it.
 
 </details>
 
