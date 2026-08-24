@@ -30,11 +30,13 @@ services:
     volumes:
       - wordpress_volume:/var/www/html
 
-  redis:
-    image: redis:1.0
-    build: ./requirements/bonus/redis
+  resume:
+    image: resume:1.0
+    build: ./requirements/bonus/resume
     networks: [inception]
     restart: unless-stopped
+    ports: ["1337:1337"]
+
 
   adminer:
     image: adminer:1.0
@@ -43,12 +45,27 @@ services:
     restart: unless-stopped
     depends_on: [mariadb]
 
-  resume:
-    image: resume:1.0
-    build: ./requirements/bonus/resume
+  redis:
+    image: redis:1.0
+    build: ./requirements/bonus/redis
     networks: [inception]
     restart: unless-stopped
-    ports: ["1337:1337"]
+
+  netdata:
+    image: netdata:1.0
+    build: ./requirements/bonus/netdata
+    networks: [inception]
+    ports: ["19999:19999"]
+    environment:
+      - NETDATA_HOST_PREFIX=/host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+    restart: unless-stopped
+
+
+
 
 secrets:
     db_password:
