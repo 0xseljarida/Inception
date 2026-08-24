@@ -3360,7 +3360,151 @@ Sources:
 <summary><h2>e · The service of my choice</h2></summary>
 
 
-**To be written.**
+> **netdata is a monitoring agent: it reads system and container metrics directly from the kernel and from Docker, and serves them as a live dashboard, with no configuration and no external database.**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> Set up a service of your choice that you think is useful. During the defense, you will have to justify your choice.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+**Justification for the defense:** every other container in this project is invisible once it is running. `docker ps` says `Up`, but says nothing about CPU, memory, or whether a container is quietly starving another. netdata answers that in real time, for the whole stack, from one container.
+
+<br>
+
+**A Dockerfile alone cannot give a container this.** Metrics live outside any container's own filesystem, in `/proc`, `/sys`, and inside the Docker daemon, so what makes this container work is almost entirely in Compose, not the Dockerfile.
+
+```dockerfile
+FROM debian:bookworm
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends netdata \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY conf/netdata.conf /etc/netdata/netdata.conf
+
+ENTRYPOINT [ "netdata", "-D" ]
+```
+
+```yaml
+  netdata:
+    image: netdata:1.0
+    build: ./requirements/bonus/netdata
+    networks: [inception]
+    ports: ["19999:19999"]
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    pid: host
+    restart: unless-stopped
+```
+
+**`-D` keeps it in the foreground**, the same reason every daemon in this project needs a flag like it: without it netdata forks to the background and PID 1 exits.
+
+<br>
+
+**Four things give it visibility, and each one answers a different question:**
+
+| Mount / setting | What it lets netdata see |
+|:--|:--|
+| `/proc:/host/proc:ro` | CPU, memory, and per process stats, read from the real host, not the container's own namespaced view |
+| `/sys:/host/sys:ro` | disk and network device counters |
+| `/var/run/docker.sock:ro` | the list of running containers and their resource usage, by asking the daemon directly |
+| `pid: host` | puts this container in the host's PID namespace, so its own process table matches the host's, needed for accurate per process attribution |
+
+**All four are read only**, `:ro`. netdata only observes.
+
+<br>
+
+**Two failures were hit building this container, and both are worth keeping.**
+
+<details>
+<summary><b>Bug 1 · `/proc/1/comm` is not a valid PID 1 check here</b></summary>
+
+<br>
+
+**The instinct was to check PID 1 the way every other container in this project was checked:**
+
+```bash
+docker exec srcs-netdata-1 cat /proc/1/comm
+```
+
+This printed `systemd`, which looked like the entrypoint had failed. It had not.
+
+**`pid: host` shares the entire PID namespace with the host.** Once that is set, `/proc/1` inside the container is the host's real init process, not this container's own process. The check that works everywhere else in this project stops meaning anything the moment `pid: host` is added.
+
+**The real check is what Docker itself considers the container's main process:**
+
+```bash
+docker inspect srcs-netdata-1 --format '{{.Path}} {{.Args}}  Pid={{.State.Pid}}'
+# netdata [-D]  Pid=76729
+```
+
+That confirmed the entrypoint was correct the whole time. The apparent failure was a wrong test, not a wrong container.
+
+</details>
+
+<details>
+<summary><b>Bug 2 · overriding one setting silently dropped another</b></summary>
+
+<br>
+
+**netdata's default web port, 19999, is unreachable from outside the container by design.** The Debian package ships:
+
+```ini
+[global]
+	bind socket to IP = 127.0.0.1
+	# Netdata is not designed to be exposed to potentially hostile
+	# networks. See https://github.com/netdata/netdata/issues/164
+```
+
+**Binding to `127.0.0.1` means the socket only accepts connections arriving on loopback**, the interface reachable only from inside that same network namespace. A container's published port maps to its real interface, `eth0`, not to its loopback, so a service bound to `127.0.0.1` is unreachable through `ports:` no matter what is published. `0.0.0.0` is the wildcard address meaning every interface, which is what makes the port actually answer once published.
+
+**The fix looked like this:**
+
+```ini
+[web]
+    bind to = 0.0.0.0
+```
+
+**Writing only that broke the container completely**, because `COPY` replaces the whole file, not one line. `run as user = netdata`, which lived under `[global]` in the packaged file, was gone. `strace` on the process showed why:
+
+```text
+setgid(65534)                               nogroup
+setuid(65534)                               nobody, not netdata (999)
+mkdir("/var/lib/netdata/registry", 0770) = -1 EACCES
+```
+
+**Without an explicit `run as user`, netdata's own internal fallback is `nobody`**, uid 65534, which owns nothing under `/var/lib/netdata`. The daemon printed a clean `FATAL` in its own log and exited, invisible in `docker logs` because netdata writes that specific line to `/var/log/netdata/error.log`, not stdout, and the container was already restarting every few seconds under `restart: unless-stopped` before the log could be read at leisure.
+
+**The working config restores both settings**, since a minimal override still has to be complete for the values it does not intend to change:
+
+```ini
+[global]
+    run as user = netdata
+
+[web]
+    bind to = 0.0.0.0
+```
+
+</details>
+
+<br>
+
+**Verified on the running stack:**
+
+```text
+resume 200   wordpress 200   wp-admin 302   adminer 200   netdata 200
+restarts: 0 on all seven containers
+netdata process: netdata [-D], running as uid 999 (netdata)
+```
 
 </details>
 
