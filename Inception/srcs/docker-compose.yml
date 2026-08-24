@@ -20,6 +20,16 @@ services:
     volumes:
       - wordpress_volume:/var/www/html
 
+  nginx:
+    image: nginx:1.0
+    build: ./requirements/nginx
+    networks: [inception]
+    restart: unless-stopped
+    ports: ["443:443"]
+    depends_on: [wordpress, adminer]
+    volumes:
+      - wordpress_volume:/var/www/html
+
   redis:
     image: redis:1.0
     build: ./requirements/bonus/redis
@@ -32,16 +42,6 @@ services:
     networks: [inception]
     restart: unless-stopped
     depends_on: [mariadb]
-
-  nginx:
-    image: nginx:1.0
-    build: ./requirements/nginx
-    networks: [inception]
-    restart: unless-stopped
-    ports: ["443:443"]
-    depends_on: [wordpress, adminer]
-    volumes:
-      - wordpress_volume:/var/www/html
 
   resume:
     image: resume:1.0
