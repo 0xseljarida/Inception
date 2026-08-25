@@ -919,6 +919,19 @@ mysqld    (already foreground)
 
 **Each one is a fake process** holding the container open while the real service runs behind it, or not at all. Note the second quote reaches into entrypoint scripts, not just the `CMD`.
 
+<br>
+
+**Which leaves the question of what belongs in the script at all.** The rule is: anything that depends only on the image goes in the image, only what depends on runtime input goes in the entrypoint.
+
+```text
+Dockerfile        mkdir /run/mysqld              a fixed path, known at build time
+Dockerfile        mkdir /var/run/vsftpd/empty    the same, for the ftp container
+entrypoint        create the database user       needs the secret, mounted at run time
+entrypoint        wp core install                needs the volume, mounted at run time
+```
+
+**Everything put in the image is done once and cached.** Everything put in the entrypoint is redone at every container start, which is why anything placed there needs a guard against running twice.
+
 </details>
 
 <a id="f--users-and-privileges-inside-a-container"></a>
