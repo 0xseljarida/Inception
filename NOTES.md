@@ -3544,6 +3544,68 @@ the SERVER opens the data connection    the CLIENT opens the data connection
 /var/www/html            the mount point for the WordPress volume
 ```
 
+<details>
+<summary><b>DEEPDIVE · chroot, jails, and why that empty directory exists</b></summary>
+
+<br>
+
+**`chroot` means "change root directory".** It is a system call that redefines what `/` points to for one process, and for every process it later starts.
+
+**A process normally sees the whole filesystem:**
+
+```text
+/
+├── home
+├── etc
+├── var
+└── usr
+```
+
+**After `chroot("/var/run/vsftpd/empty")` that same process sees only:**
+
+```text
+/
+```
+
+Nothing else exists as far as it is concerned. The real system is still there, the process simply has no name for it any more.
+
+<br>
+
+**"Jail" is the informal name for that restriction.** It is not a separate mechanism, it is what the result of a `chroot` is usually called: a filesystem a process cannot normally get out of.
+
+<br>
+
+**A privileged process is one running with powerful permissions, usually as `root`.** An unprivileged process runs as an ordinary user and can do far less.
+
+```text
+root process         powerful
+normal user process  limited
+```
+
+**vsftpd splits itself along exactly that line.** One part keeps root, because binding port 21 and reading `/etc/shadow` during authentication require it. The other part is the one holding the socket to a stranger on the network before that stranger has proven anything, so it runs unprivileged and chrooted.
+
+```text
+vsftpd
+   │
+   ├── privileged part
+   │
+   └── unprivileged part
+           │
+           └── chroot
+                 ↓
+        /var/run/vsftpd/empty
+                 ↓
+              "jail"
+```
+
+**A sandbox is the broader idea:** run something in a restricted environment so it cannot freely affect the rest of the system. A `chroot` can be part of a sandbox, but the word covers more, including the seccomp filter vsftpd also applies.
+
+**So the directory is not storage, it is a boundary.** It has to exist for the `chroot` to succeed, and it has to be empty and non writable so that reaching it is worth nothing to an attacker.
+
+</details>
+
+<br>
+
 **The implementation is written below as it is built.**
 
 Sources:
