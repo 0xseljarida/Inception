@@ -3628,6 +3628,58 @@ Sources:
 
 </details>
 
+<br>
+
+**Debian's `/etc/vsftpd.conf` is an example file, not a configuration to inherit.** Out of roughly 130 lines only thirteen set anything, and the file itself points at `vsftpd.conf(5)` for the compiled defaults. Six of those thirteen are noise here: `listen_ipv6`, which is mutually exclusive with `listen`, `dirmessage_enable` and `use_localtime`, which are cosmetic, `connect_from_port_20`, which only affects active mode, and the two `rsa_` paths, which are read only when `ssl_enable` is on.
+
+**What is left is written from scratch, in the order a connection actually goes through it.**
+
+```text
+bind the socket  →  who logs in  →  what they may do  →  where they are confined
+                 →  the pre-auth jail  →  the data connection  →  logging
+```
+
+```ini
+listen=YES
+
+anonymous_enable=NO
+local_enable=YES
+pam_service_name=vsftpd
+
+write_enable=YES
+
+chroot_local_user=YES
+allow_writeable_chroot=YES
+local_root=/var/www/html
+
+secure_chroot_dir=/var/run/vsftpd/empty
+
+pasv_address=127.0.0.1
+pasv_min_port=21100
+pasv_max_port=21110
+
+xferlog_enable=YES
+```
+
+**Every line is there because the default blocks something.** Defaults below are from `vsftpd.conf(5)`, vsftpd 3.0.3 on Debian 12.
+
+| Directive | Default | Why it is needed |
+|:--|:--|:--|
+| `listen` | `NO` | nothing binds port 21. vsftpd was written for `inetd`, which held the port and forked one process per connection |
+| `anonymous_enable` | `NO` | already correct, kept explicit so the choice is visible |
+| `local_enable` | `NO` | no system account could log in at all |
+| `pam_service_name` | `vsftpd` | names the PAM service that authenticates the account against `/etc/shadow` |
+| `write_enable` | `NO` | `STOR`, `DELE`, `MKD` and `RNTO` are refused. The login succeeds and every upload fails |
+| `chroot_local_user` | `NO` | the session is not confined, so the client can `cd /etc` and read the whole container |
+| `allow_writeable_chroot` | `NO` | vsftpd 3 refuses a session whose jail root is writable, with `500 OOPS: vsftpd: refusing to run with writable root inside chroot()`. The volume has to be writable, so the check is waived |
+| `local_root` | the account's home | the directory the session starts in and is confined to. Pointing it at the WordPress volume is the entire purpose of the container |
+| `secure_chroot_dir` | `/var/run/vsftpd/empty` | the jail of the unprivileged pre-authentication process. Only the value is a default, the directory itself does not exist |
+| `pasv_address` | taken from the connected socket | inside the container that address is `172.18.0.x`, which the client cannot reach |
+| `pasv_min_port` / `pasv_max_port` | `0`, any port | an unknown range cannot be published in Compose |
+| `xferlog_enable` | `NO` | records every transfer, which is what proves an upload happened at the defense |
+
+**One option is deliberately left out.** `userlist_enable` with `userlist_file` restricts login to the accounts named in a single file rather than every system account with a valid shell. It is cheap hardening, but `local_root` and the chroot already confine the only account that exists in this image.
+
 </details>
 
 ---
