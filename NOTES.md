@@ -3502,6 +3502,18 @@ the SERVER opens the data connection    the CLIENT opens the data connection
 
 <br>
 
+**Where the difficulty is, before anything else.** Everything in this container is ordinary except three lines, and they are all about the second connection.
+
+```ini
+pasv_address=127.0.0.1     # the address vsftpd advertises, not the one it binds
+pasv_min_port=21100        # the range must be published 1:1 in Compose,
+pasv_max_port=21110        # because FTP announces port numbers inside its own replies
+```
+
+**The concept: FTP sends addressing information in its payload, so NAT breaks it.** Every other service in this project is reached at whatever port the host publishes, and knows nothing about it. FTP tells the client which port to dial, so a remapped port makes the server advertise one number while the client reaches another, and the default advertised address is the container's `172.18.0.x`.
+
+<br>
+
 **What this container is for.** The subject points it at the WordPress volume, so FTP becomes a third way into `/var/www/html`, next to php-fpm and nginx.
 
 ```text
