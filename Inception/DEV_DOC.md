@@ -4,7 +4,7 @@ How to set up a machine from nothing, how the stack is built, and how the state
 is stored.
 
 Reference environment: Debian 12 Bookworm, Docker CE 29.7.2, Docker Compose
-plugin v5.4.0. Use `docker compose`, never `docker-compose`.
+plugin v5.5.0. Use `docker compose`, never `docker-compose`.
 
 ---
 
