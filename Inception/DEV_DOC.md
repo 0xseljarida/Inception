@@ -12,9 +12,10 @@ plugin v5.5.0. Use `docker compose`, never `docker-compose`.
 
 ### 1. Install Docker Engine
 
-Docker Desktop is deliberately not used: it runs the engine inside a Linux VM, so
-`device: /home/sel-jari/data/...` would resolve inside that VM instead of the real
-filesystem and break the required volume setup. Install Docker CE directly:
+Do not use Docker Desktop here. It runs the engine inside a Linux VM, so
+`device: /home/sel-jari/data/...` would resolve inside that VM rather than on the
+real filesystem, and the volume setup the subject asks for would break. Install
+Docker CE directly:
 
 ```bash
 sudo apt-get update
@@ -47,13 +48,14 @@ make hosts                          # appends the line, guarded, asks for sudo
 getent hosts sel-jari.42.fr sel-jari.resume.42.fr
 ```
 
-Not a prerequisite of `up`, on purpose: `make` must never ask for a root password
-just to start containers. The guard is a `grep -qF`, so the rule is idempotent.
+`hosts` is kept out of `up` on purpose, because `make` should never ask for a
+root password just to start containers. The rule guards itself with `grep -qF`,
+so running it again does nothing.
 
 ### 4. Recreate the secrets
 
-`secrets/` is gitignored, so a fresh clone cannot start until the three files
-exist:
+`secrets/` is gitignored, so a fresh clone has none of it and will not start
+until these three files exist:
 
 ```bash
 mkdir -p secrets
@@ -69,17 +71,17 @@ CRED
 chmod 600 secrets/*.txt
 ```
 
-Two rules the formats impose:
+Two things the formats care about:
 
 - `db_password.txt` and `db_root_password.txt` hold **the password and nothing
-  else**. Use `printf`, not `echo`: the entrypoint reads the file with `cat`, so a
-  trailing newline becomes part of the password.
+  else**. Use `printf` rather than `echo`, because the entrypoint reads the file
+  with `cat` and a trailing newline would become part of the password.
 - `credentials.txt` is *sourced as a shell script* by the WordPress entrypoint, so
-  it must be valid `KEY=value` assignments with those exact two names. Quote the
-  value if it contains spaces or shell metacharacters — an unquoted `;` or `$@`
-  is executed, and the container dies with exit 127.
+  it has to be valid `KEY=value` assignments using those exact two names. Quote
+  the value if it contains spaces or shell metacharacters: an unquoted `;` or `$@`
+  gets executed, and the container dies with exit 127.
 
-Check the gitignore still covers it before committing anything:
+Before you commit anything, check that the gitignore still covers it:
 
 ```bash
 git check-ignore -v secrets/db_password.txt      # must print a match
@@ -95,12 +97,13 @@ MYSQL_DATABASE=wordpress
 ENV
 ```
 
-It carries no password, and is kept out of git anyway so that a credential added
-to it later cannot leak through a file git already tracks. Compose loads it with
-`env_file:` into mariadb and wordpress. Changing either value after the first
-start has no effect: both are consumed during first-boot initialisation only, and
-the entrypoint guard skips that afterwards. Run `make fclean` to really change
-them.
+There is no password in here. It stays out of git anyway, so that a credential
+added to it later cannot leak through a file git is already tracking.
+
+Compose loads it with `env_file:` into mariadb and wordpress. Changing either
+value after the first start does nothing, because both are read only during
+first-boot initialisation and the entrypoint guard skips that afterwards. To
+really change them, `make fclean` first.
 
 ---
 
@@ -121,8 +124,8 @@ make
       └── build ./requirements/bonus/netdata    -> image netdata:1.0
 ```
 
-Every one is built from `debian:bookworm` by its own Dockerfile; no image is
-pulled ready-made.
+Every one of them is built from `debian:bookworm` by its own Dockerfile. No image
+is pulled ready-made.
 
 | Target | Command behind it |
 |---|---|
@@ -148,12 +151,16 @@ up: $(VOLUMES)
 ```
 
 Make only runs a rule whose target does not exist, so `mkdir -p` runs on the
-first `make` and never again. It matters because with `type: none, o: bind` the
-mount fails outright if the host directory is missing. `fclean` is the only place
-`sudo` appears, and it is justified: the volume files belong to `mysql` (uid 999)
-and `www-data` (uid 33), so your account cannot delete them.
+first `make` and never again. That matters: with `type: none, o: bind`, the mount
+fails outright if the host directory is missing.
 
-**Start order.** Compose starts in `depends_on` order:
+`fclean` is the only target that needs `sudo`, and it needs it for a real reason.
+The files in the volumes belong to `mysql` (uid 999) and `www-data` (uid 33), so
+your own account cannot delete them.
+
+### Start order
+
+Compose starts them in `depends_on` order:
 
 ```text
 mariadb, redis  ->  wordpress, adminer  ->  nginx
@@ -162,20 +169,25 @@ resume, netdata        (no dependencies)
 
 nginx comes last because it resolves `fastcgi_pass wordpress:9000` and
 `fastcgi_pass adminer:9000` when it *parses* its configuration, and refuses to
-start if either name is missing. `depends_on` waits for a container to be
-*started*, not *ready*, which is why the WordPress entrypoint polls the MariaDB
-port itself.
+start if either name is missing.
 
-**Caching.** A changed `COPY` invalidates every layer after it. In the nginx
-Dockerfile the certificate `RUN` is the expensive step, so keeping
-`COPY conf/default.conf` after it means editing the server block does not
-regenerate the key pair. Force a full rebuild with `build --no-cache`.
+`depends_on` only waits for a container to be *started*, not *ready*. That is why
+the WordPress entrypoint polls the MariaDB port itself before doing anything.
 
-**Image names.** Each service declares `image: <name>:1.0`, matching its service
-name; without `image:` Compose would name it `<project>-<service>`, and the
-evaluation requires the two to be equal. The tag is `1.0` and never `latest`:
-`latest` is only the default tag string Docker appends when none is given, it
-does not mean "newest", and the subject prohibits it.
+### Caching
+
+A changed `COPY` invalidates every layer after it. In the nginx Dockerfile the
+certificate `RUN` is the expensive step, so keeping `COPY conf/default.conf`
+after it means editing the server block does not regenerate the key pair. Force
+a full rebuild with `build --no-cache`.
+
+### Image names
+
+Each service declares `image: <name>:1.0`, matching its service name. Without
+`image:`, Compose would call it `<project>-<service>`, and the evaluation wants
+the two to match. The tag is `1.0` and never `latest`, which is only the default
+tag string Docker appends when you give none. It does not mean "newest", and the
+subject prohibits it.
 
 ---
 
@@ -191,21 +203,26 @@ docker compose -f srcs/docker-compose.yml up -d --build nginx  # rebuild one
 docker exec srcs-nginx-1 cat /proc/1/comm                      # what is PID 1
 ```
 
-`stop` and `rm` differ: `running --stop--> exited --rm--> gone`. `stop` sends
-SIGTERM to PID 1 and leaves the container `Exited`; `rm` deletes the container
-object and its writable layer. `docker rmi` refuses an image while a container
-still references it, so remove the container first.
+`stop` and `rm` are not the same thing: `running --stop--> exited --rm--> gone`.
+`stop` sends SIGTERM to PID 1 and leaves the container `Exited`, while `rm`
+deletes the container object and its writable layer. `docker rmi` refuses an
+image while a container still references it, so remove the container first.
 
-**PID 1 and signals.** Every container runs a real foreground daemon as PID 1:
+### PID 1 and signals
+
+Every container runs a real foreground daemon as PID 1:
 `nginx -g "daemon off;"`, `php-fpm8.2 -F`, `mariadbd --user=mysql`. Both
 entrypoints end with `exec "$@"`, which replaces the shell's process image with
 the daemon while keeping PID 1, so `docker stop` delivers SIGTERM to the daemon
 itself. Without `exec`, the shell would stay PID 1, ignore SIGTERM, and every
-stop would burn the full ten-second timeout before SIGKILL. No `tail -f`,
-`sleep infinity`, `while true` or bare `bash` is used anywhere, entrypoints
-included.
+stop would burn the full ten-second timeout before SIGKILL.
 
-**Implementation notes**, the non-obvious ones:
+No `tail -f`, `sleep infinity`, `while true` or bare `bash` appears anywhere,
+entrypoints included.
+
+### Implementation notes
+
+The things that were not obvious the first time:
 
 - The Debian nginx package ships `sites-enabled/default`, which owns port 80 as
   `default_server`. The Dockerfile deletes that symlink.
@@ -232,11 +249,11 @@ included.
   `/var/www/static/style.css` and 404-ing every stylesheet.
 - netdata declares no mounts and no environment variables. Its documentation asks
   for the host `/proc` and `/sys` with `NETDATA_HOST_PREFIX=/host`, but measuring
-  here gave the identical 257 charts either way: Docker already mounts the host
+  here gave the same 257 charts either way: Docker already mounts the host
   `sysfs`, and `/proc/stat`, `/proc/meminfo` and `/proc/uptime` are not
-  namespaced. Per-container metrics were dropped on purpose, since they need
-  `/var/run/docker.sock` and `pid: host` — a writable Docker socket is
-  effectively root on the host, and `:ro` does not restrain it.
+  namespaced. Per-container metrics were dropped on purpose, because they need
+  `/var/run/docker.sock` and `pid: host`. A writable Docker socket is effectively
+  root on the host, and `:ro` does not restrain it.
 
 ---
 
@@ -254,11 +271,13 @@ Compose prefixes volume names with the project name, the directory holding the
 Compose file, so `mariadb_volume` becomes `srcs_mariadb_volume`.
 
 `down -v` removes the Docker volume objects, but with `type: none, o: bind` the
-files stay on the host: the volume is only a mount definition pointing at a
-directory Docker did not create. That is why `make fclean` deletes the
-directories explicitly, and forgetting the second half is the classic trap — the
-next `make up` finds a populated datadir, the guards skip initialisation, and the
-old database comes back with the old password.
+files stay on the host. The volume is only a mount definition pointing at a
+directory Docker never created, which is why `make fclean` deletes the
+directories explicitly.
+
+Forgetting that second half is the trap everyone hits once: the next `make up`
+finds a populated datadir, the guards skip initialisation, and the old database
+comes back with the old password.
 
 ---
 
@@ -290,8 +309,8 @@ files and nginx serves the static ones from the same bytes. That is why nginx
 needs no copy of the site, and why `root /var/www/html/` points at the same
 directory `SCRIPT_FILENAME` resolves against.
 
-Because removing a container never loses data, **the second boot is not the first
-boot**, and both entrypoints are written for it:
+Because removing a container never loses the data, the second boot is not the
+first boot. Both entrypoints are written with that in mind:
 
 ```bash
 # mariadb
@@ -308,8 +327,8 @@ fi
 exec "$@"
 ```
 
-Those guards are what make `restart: unless-stopped` safe: a container that
-crashes and restarts finds the state already there, skips initialisation, and
+Those guards are what make `restart: unless-stopped` safe. A container that
+crashes and comes back finds the state already there, skips initialisation, and
 does not recreate the database or reset the WordPress users.
 
 ```bash
@@ -317,4 +336,4 @@ make down && make up
 curl -k https://sel-jari.42.fr        # same site, same posts, same users
 ```
 
-`make fclean` then `make` proves a clean first boot still works.
+And `make fclean` followed by `make` proves a clean first boot still works.
