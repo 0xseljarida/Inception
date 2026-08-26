@@ -63,7 +63,7 @@ resume domain, so the rule is idempotent.
 
 ### 4. Recreate the secrets
 
-`secrets/` is gitignored, so a fresh clone cannot start until the four files
+`secrets/` is gitignored, so a fresh clone cannot start until the three files
 exist. Create them, then never commit them:
 
 ```bash
@@ -71,7 +71,6 @@ mkdir -p secrets
 
 printf '%s' 'CHOOSE_A_DB_PASSWORD'      > secrets/db_password.txt
 printf '%s' 'CHOOSE_A_ROOT_PASSWORD'    > secrets/db_root_password.txt
-printf '%s' 'CHOOSE_AN_FTP_PASSWORD'    > secrets/ftp_password.txt
 
 cat > secrets/credentials.txt <<'CRED'
 ADMIN_PASSWORD=CHOOSE_A_WP_ADMIN_PASSWORD
@@ -83,12 +82,9 @@ chmod 600 secrets/*.txt
 
 Rules that the file formats impose:
 
-- `db_password.txt`, `db_root_password.txt` and `ftp_password.txt` hold **the
-  password and nothing else**. Use `printf`, not `echo`: a trailing newline
-  becomes part of the password, since the entrypoint reads the file with `cat`.
-- `ftp_password.txt` is fed to `chpasswd`, which sets the password of a real
-  system account inside the container, so it must satisfy nothing more than being
-  a single line.
+- `db_password.txt` and `db_root_password.txt` hold **the password and nothing
+  else**. Use `printf`, not `echo`: a trailing newline becomes part of the
+  password, since the entrypoint reads the file with `cat`.
 - `credentials.txt` is sourced as a shell script by the WordPress entrypoint, so
   it must be valid `KEY=value` shell assignments with those exact two names. Quote
   the value if it contains spaces or shell metacharacters.
@@ -109,19 +105,17 @@ It holds only what is not confidential:
 cat > srcs/.env <<'ENV'
 MYSQL_USER=wp_user
 MYSQL_DATABASE=wordpress
-FTP_USER=ftp_user
 ENV
 ```
 
 It carries no password. It is kept out of git anyway, so that a credential added
 to it later cannot leak through a file git is already tracking.
 
-Compose loads it through `env_file:` into the mariadb, wordpress and ftp
-containers. Changing `MYSQL_DATABASE` or `MYSQL_USER` after the first start has
-no effect: both are consumed only during first-boot initialisation, and the guard
-in the MariaDB entrypoint skips that on later starts. `FTP_USER` behaves the same
-way, its guard being `id "$FTP_USER"` in the ftp entrypoint. To really change
-them, run `make fclean` first.
+Compose loads it through `env_file:` into the mariadb and wordpress containers.
+Changing `MYSQL_DATABASE` or `MYSQL_USER` after the first start has no effect:
+both are consumed only during first-boot initialisation, and the guard in the
+MariaDB entrypoint skips that on later starts. To really change them, run
+`make fclean` first.
 
 ---
 
@@ -139,11 +133,10 @@ make
       ├── build ./requirements/bonus/redis      -> image redis:1.0
       ├── build ./requirements/bonus/adminer    -> image adminer:1.0
       ├── build ./requirements/bonus/resume     -> image resume:1.0
-      ├── build ./requirements/bonus/netdata    -> image netdata:1.0
-      └── build ./requirements/bonus/ftp        -> image ftp:1.0
+      └── build ./requirements/bonus/netdata    -> image netdata:1.0
 ```
 
-Three services are mandatory and five are bonus. Every one of them is built from
+Three services are mandatory and four are bonus. Every one of them is built from
 its own Dockerfile on `debian:bookworm`, and no image is pulled ready made.
 
 ### Makefile targets
@@ -183,15 +176,12 @@ the volumes were written by the container users, `mysql` (uid 999) and
 
 ### Build order and caching
 
-Compose builds all eight services, then starts them in `depends_on` order:
+Compose builds all seven services, then starts them in `depends_on` order:
 
 ```text
 mariadb, redis  ->  wordpress, adminer  ->  nginx
-resume, netdata, ftp   (no dependencies, started whenever Compose reaches them)
+resume, netdata        (no dependencies, started whenever Compose reaches them)
 ```
-
-`ftp` declares no `depends_on` even though it shares `wordpress_volume`: a volume
-is a mount, not a service, so it is ready as soon as Docker mounts it.
 
 nginx comes last because it resolves both `fastcgi_pass wordpress:9000` and
 `fastcgi_pass adminer:9000` when it parses its configuration, and refuses to
@@ -330,31 +320,6 @@ including inside the entrypoints.
   since a socket is used by sending on it rather than by writing the file. That
   cost was not worth a cosmetic gain, so the feature was dropped and the container
   keeps only read-only access to `/proc` and `/sys`.
-- **ftp** runs `vsftpd` against `wordpress_volume`, the same bytes nginx serves,
-  so a file uploaded over FTP is immediately reachable over HTTPS. The entrypoint
-  creates a real system account from `FTP_USER` and `/run/secrets/ftp_password`,
-  guarded by `id "$FTP_USER"` so a restart does not try to create it twice, then
-  `chmod g+w /var/www/html` because the volume belongs to `www-data` and the
-  account is only in that group.
-- **vsftpd needs no `-D` to stay in the foreground.** In standalone mode
-  (`listen=YES`) it defaults to `background=NO`, so `CMD ["/usr/sbin/vsftpd"]`
-  is already a foreground daemon and becomes PID 1 through the entrypoint's
-  `exec "$@"`.
-- **Passive mode is the part with real constraints.** In passive mode the server
-  tells the client which address and port to open the data connection to, and
-  vsftpd derives that address from the socket the control connection arrived on,
-  which inside the container is the bridge address `172.18.0.x`. The client cannot
-  route there, so `pasv_address=127.0.0.1` is mandatory. The port range
-  `pasv_min_port`/`pasv_max_port` must be published **1:1** in Compose,
-  `"21100-21110:21100-21110"`, because FTP announces port numbers inside its own
-  reply text: a remapped port makes the server advertise one number while the
-  client must reach another. The consequence of hardcoding `127.0.0.1` is that
-  passive transfers work from the host and not from another machine.
-- **`allow_writeable_chroot=YES` is required here.** vsftpd 3 refuses to start a
-  session whose chroot root is writable, and `/var/www/html` has to be writable
-  for uploads to work at all. `secure_chroot_dir=/var/run/vsftpd/empty` must also
-  exist, which is why the Dockerfile creates it: it is the empty jail used by the
-  unprivileged pre-authentication process.
 
 ---
 
