@@ -58,6 +58,17 @@ services:
     ports: ["19999:19999"]
     restart: unless-stopped
 
+  ftp:
+    image: ftp:1.0
+    build: ./requirements/bonus/ftp
+    networks: [inception]
+    secrets: [ftp_password]
+    ports: ["21:21", "21100-21110:21100-21110"]
+    env_file: [./.env]
+    restart: unless-stopped
+    volumes:
+      - wordpress_volume:/var/www/html
+
 
 
 
@@ -68,6 +79,9 @@ secrets:
       file: ../secrets/db_root_password.txt
     credentials:
       file: ../secrets/credentials.txt
+    ftp_password:
+      file: ../secrets/ftp_password.txt
+
 
 networks:
   inception:
