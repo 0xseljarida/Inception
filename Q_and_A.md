@@ -232,3 +232,28 @@ passive mode   client ──connects to──> server    server says "call me on
 That is why passive mode is the default in practice, and it is the reason a containerised FTP server needs both `pasv_address` and a fixed, published passive port range.
 
 </details>
+
+---
+
+# Docker — general (to answer)
+
+1. Change nginx's listen port inside the container to 8443. What two places need to change for the site to still be reachable on the host at 443?
+
+2. Add a `HEALTHCHECK` instruction to the mariadb Dockerfile. What command proves the database is actually ready to accept queries, not just that the process is running?
+
+3. `docker compose down` vs `docker compose down -v`. Which one destroys the data in the named volumes, and why?
+
+4. Pin the wordpress base image to an exact Debian bookworm tag instead of `bookworm-slim`. Where do you find the exact tag string?
+
+5. Add a `.dockerignore` to the wordpress build context. What should it exclude, and what build step gets faster because of it?
+
+6. Rename the custom network in `docker-compose.yml` from the Compose default to an explicit name. What else in the stack, if anything, needs to change?
+
+7. Run `docker network inspect` on this project's network. What field tells you mariadb and wordpress can resolve each other by container name?
+
+8. Force-rebuild the wordpress image without cache. What flag, and when is `--no-cache` actually necessary versus just `docker compose build`?
+
+9. `docker exec` into the mariadb container. What command checks whether php-fpm on the wordpress container can actually reach port 3306 from there?
+
+10. Change the WordPress admin username after first boot, without deleting the volume. What's the wp-cli command, and does it touch the database or just config?
+
