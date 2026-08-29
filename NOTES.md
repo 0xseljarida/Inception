@@ -79,9 +79,7 @@ Three options existed:
 **Containers are the answer.** Keep one operating system, and make the kernel **restrict what each process can see of the machine**. A container is just a process. 
 
 > **Note:** the "200 customers" framing above is a teaching device, not history.
-> A 2005 host would have answered "shared hosting", and the real waste containers
-> attacked was enterprise VM sprawl: thousands of VMs idling in single-digit CPU
-> utilisation, the figure usually quoted for unvirtualised servers being 7 to 12%.
+> A 2005 host would have answered "shared hosting".
 
 
 <a id="a--container-vs-virtual-machine"></a>
