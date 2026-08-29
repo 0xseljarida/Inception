@@ -52,6 +52,11 @@
     * [b · Adminer](#b--adminer)
     * [c · redis cache](#c--redis-cache)
     * [d · The service of my choice](#d--the-service-of-my-choice)
+* [14 · Defense answers](#14--defense-answers)
+    * [a · How Docker and Docker Compose work](#a--how-docker-and-docker-compose-work)
+    * [b · An image used with Compose vs. without](#b--an-image-used-with-compose-vs-without)
+    * [c · The benefit of Docker compared to VMs](#c--the-benefit-of-docker-compared-to-vms)
+    * [d · The pertinence of the directory structure](#d--the-pertinence-of-the-directory-structure)
 
 ---
 
@@ -3590,6 +3595,107 @@ MAIN : Found 0 legacy dbengines, setting multidb diskspace to 256MB
 **What this container costs the infrastructure, stated plainly for the defense:** one published port, and nothing else. No mount, no shared namespace, no capability beyond the default set, no access to the Docker daemon. What it sees, it sees because Docker gives every container that much already. It can see the machine. It cannot touch it.
 
 </details>
+
+</details>
+
+</details>
+
+<a id="14--defense-answers"></a>
+<details>
+<summary><h1>14 · Defense answers</h1></summary>
+
+
+**The subject asks the evaluated person to explain four things in simple terms, not to demonstrate them.** This section answers each one directly, pointing back at the section that proves it in detail.
+
+<a id="a--how-docker-and-docker-compose-work"></a>
+<details>
+<summary><h2>a · How Docker and Docker Compose work</h2></summary>
+
+
+**Docker builds, ships and runs containers by driving three Linux kernel features it did not invent:** namespaces for isolation, cgroups for resource limits, and a union filesystem for layered images. § 02 and § 04 c have the mechanism.
+
+**It is client and server.** The `docker` CLI is an HTTP client that talks to a background daemon, `dockerd`, over a Unix socket, and the daemon hands the actual container creation down to `containerd` and `runc`. § 05 a proves this with a raw `curl` call to the socket.
+
+**Compose is not a second engine.** It reads one YAML file describing several containers, the network they share, and the volumes that persist, then sends the same requests to the same daemon `docker run` would. § 07 has the full request chain: Compose parses the file, decides what should exist, and reconciles that against what is actually running.
+
+> **In one sentence:** Docker packages an application and its dependencies into an image and runs it as an isolated process; Compose describes several of those containers as one stack and starts them together with one command instead of one `docker run` per container.
+
+Sources: [What is Docker Compose?](https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-docker-compose/) · [What is a container?](https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-a-container/)
+
+</details>
+
+<a id="b--an-image-used-with-compose-vs-without"></a>
+<details>
+<summary><h2>b · An image used with Compose vs. without</h2></summary>
+
+
+**The image itself does not change.** A `Dockerfile` produces the same layered image whether it is built by `docker build` or by Compose's `build:` key, § 06 a covers what actually produces a layer, and that process is identical either way.
+
+**What changes is everything around the image.** `docker run` needs every flag typed by hand and repeated on every machine, the network, the volumes, the env file, the restart policy, one line each, in the right order. § 07's "what it replaces" box has the full command for just one container of this project. Compose reads that same information once from `docker-compose.yml` and reconciles it declaratively: `docker compose up` compares the file against what is running and only changes the difference, so running it twice does nothing the second time, where a repeated `docker run` would either fail on a name clash or create a duplicate container.
+
+**Naming differs too.** An image built by `docker build -t name .` gets whatever tag was typed by hand. An image built through Compose is named `<project>-<service>` automatically unless `image:` overrides it, which is why this project's Compose file must name every image after its service explicitly.
+
+> **In one sentence:** the image is identical either way; Compose is the layer that remembers how to run it, so the same image goes from "one long command to retype correctly every time" to "one line in a file that reconciles itself."
+
+Sources: [What is a Dockerfile?](https://docs.docker.com/get-started/docker-concepts/building-images/writing-a-dockerfile/) · [What is Docker Compose?](https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-docker-compose/)
+
+</details>
+
+<a id="c--the-benefit-of-docker-compared-to-vms"></a>
+<details>
+<summary><h2>c · The benefit of Docker compared to VMs</h2></summary>
+
+
+**A container shares the host's kernel, a VM does not.** § 01 a already has the density argument: 200 isolated VMs means 200 booted operating systems, 200 isolated containers means one kernel and one process each.
+
+**That single difference is where every practical advantage comes from:**
+
+| | Virtual Machine | Container |
+|:--|:--|:--|
+| **Boot** | a real boot sequence, minutes | reuses the running kernel, instant |
+| **Memory** | a full guest OS each | only the app and its dependencies |
+| **Density** | few per host | many per host, same hardware |
+| **Portability** | an image tied to a hypervisor | the same image runs unchanged on a laptop, a data center, or the cloud |
+
+**Docker's own comparison states this plainly:** *"Docker is lightweight and fast. It provides a viable, cost-effective alternative to hypervisor-based virtual machines, so you can use more of your server capacity."*
+
+**The trade is isolation strength, not a free lunch.** A VM's boundary is a hypervisor emulating hardware; a container's boundary is kernel bookkeeping, so a kernel bug can cross it in a way a hypervisor escape cannot. § 01 a states this trade explicitly, and it is the honest answer if a corrector pushes on "so why ever use a VM."
+
+> **In one sentence:** a VM virtualizes hardware and boots a whole OS per app; Docker virtualizes only the OS layer, so many containers share one kernel, start in milliseconds, and cost only what the app itself needs.
+
+Sources: [Docker overview](https://docs.docker.com/get-started/docker-overview/) · [What is a container?](https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-a-container/)
+
+</details>
+
+<a id="d--the-pertinence-of-the-directory-structure"></a>
+<details>
+<summary><h2>d · The pertinence of the directory structure</h2></summary>
+
+
+**Every folder in the required layout exists to satisfy one evaluation rule, not by convention:**
+
+```text
+Makefile                    drives everything; the subject requires make → compose → Dockerfiles, never the reverse
+srcs/
+  .env                      non-secret config, the subject requires it in exactly this file
+  docker-compose.yml        the one file describing the whole stack, § 07
+  requirements/
+    nginx/
+      Dockerfile             one Dockerfile per service is mandatory, no shared or pre-built images
+      conf/                  config files COPYed in, kept out of the Dockerfile itself
+      tools/                 entrypoint scripts, kept out of the Dockerfile itself
+    wordpress/  mariadb/    same shape, repeated per service
+```
+
+**`Makefile` sits at the root, not inside `srcs/`.** The subject requires it to set up the entire application, which means calling Compose, and that command is only meaningful run from outside `srcs/`, pointed at `srcs/docker-compose.yml`.
+
+**One `Dockerfile` per service, each in its own directory.** This is the rule that forbids a shared Dockerfile or a pre-built image pulled from a registry: three services, three build contexts, three separate layer histories, so a change to nginx's image never invalidates mariadb's build cache, § 04 c.
+
+**`conf/` and `tools/` are kept separate from the `Dockerfile` on purpose.** § 06 d's build-context rule explains why it is even possible: `COPY` can only reach files already inside the context sent to the daemon. Keeping config and entrypoint scripts as their own files, rather than inlined as `RUN echo` lines, makes them readable and diffable on their own instead of buried inside build instructions.
+
+**`secrets/` sits outside `srcs/` entirely, and is gitignored, because § 07 draws a hard line from the subject itself:** committed credentials fail the project outright. Keeping the one directory that must never reach Git structurally separate from the one that gets submitted is what makes that rule easy to follow correctly.
+
+> **In one sentence:** the layout is not arbitrary, it is the minimum structure that makes "one Dockerfile per service," "Compose calls the Dockerfiles," "the Makefile calls Compose," and "no secret ever touches Git" all true at once.
 
 </details>
 
