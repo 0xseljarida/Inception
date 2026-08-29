@@ -47,9 +47,6 @@
     * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
     * [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
 * [12 · Docker networking](#12--docker-networking)
-    * [a · Every container gets its own network stack](#a--every-container-gets-its-own-network-stack)
-    * [b · The user-defined bridge and its DNS](#b--the-user-defined-bridge-and-its-dns)
-    * [c · Publishing a port](#c--publishing-a-port)
 * [13 · The Makefile](#13--the-makefile)
 * [14 · Bonus](#14--bonus)
     * [a · A static website](#a--a-static-website)
@@ -2735,7 +2732,7 @@ The container never starts, and the directory is still missing afterwards. So th
 <details>
 <summary><h1>12 · Docker networking</h1></summary>
 
-> **A Docker network is a virtual switch on the host, and every container attached to it gets its own network stack with its own address, so containers reach each other by service name and the outside world reaches only the ports that were published.**
+> **Docker networking determines how containers communicate. Docker can create virtual networks that act like virtual switches. Containers attached to the same network can communicate with each other.**
 
 <details>
 <summary><b>Proof from the subject</b></summary>
@@ -2752,131 +2749,55 @@ The container never starts, and the directory is still missing afterwards. So th
 
 <br>
 
-<a id="a--every-container-gets-its-own-network-stack"></a>
-<details>
-<summary><h2>a · Every container gets its own network stack</h2></summary>
-
-**The network namespace from § 02 b is what makes this work.** A container does not share the host's network stack. It gets its own interfaces, its own routing table, its own firewall rules, and its own set of 65535 ports.
-
 ```text
-host
-├── network namespace of the host      lo, wlp2s0, docker0, br-xxxx
-├── namespace of nginx                 lo, eth0 = 172.18.0.8
-├── namespace of wordpress             lo, eth0 = 172.18.0.2
-└── namespace of adminer               lo, eth0 = 172.18.0.9
-```
-
-**The consequence to state at the defense:** two containers can listen on the same port without colliding, because the port numbers belong to different stacks. In this project that is not theoretical:
-
-```text
-wordpress   00000000:2328     php-fpm listening on 0.0.0.0:9000
-adminer     00000000:2328     php-fpm listening on 0.0.0.0:9000
-```
-
-Both read from `/proc/net/tcp`, where `2328` is hexadecimal for 9000. On a single machine without containers, the second one would fail with `address already in use`.
-
-</details>
-
----
-
-<a id="b--the-user-defined-bridge-and-its-dns"></a>
-<details>
-<summary><h2>b · The user-defined bridge and its DNS</h2></summary>
-
-**A bridge network is a virtual switch created on the host.** Docker adds a bridge interface, gives it a subnet, and connects each container to it through a virtual cable, one end inside the container as `eth0`, the other on the bridge.
-
-```text
-                    ┌──────────────────────────┐
-                    │  bridge  srcs_inception  │
-                    │        172.18.0.0/16     │
-                    └─┬───┬───┬────────┬───┬───┘
-        172.18.0.2 ───┘   │   │        │   └─── 172.18.0.9  adminer
-        172.18.0.3 ───────┘   │        └─────── 172.18.0.8  nginx
-        172.18.0.4 ───────────┘
-         wordpress, mariadb, resume
-```
-
-**Declaring it in Compose is three lines**, and `driver:` is omitted because `bridge` is the default:
-
-```yaml
-networks:
-  inception:
-```
-
-**A service then opts in by name**, the same declare-then-opt-in pattern as volumes and secrets:
-
-```yaml
-  nginx:
-    networks: [inception]
+             Docker bridge network
+              ┌───────────────┐
+              │ Virtual switch│
+              └───┬────┬────┬─┘
+                  │    │    │
+               nginx  WP  MariaDB
 ```
 
 <br>
 
-**What makes a user-defined network different from Docker's built-in `docker0` is DNS.** Docker runs a resolver at `127.0.0.11` inside every attached container, and it answers with the address of any service on the same network.
+**The three modes:**
 
 ```text
-/etc/resolv.conf inside every container
-nameserver 127.0.0.11
+BRIDGE
+Container ── Docker virtual network ── Other containers
+                         │
+                         └── Host/NAT ── Internet
+
+
+HOST
+Container ───────────── Host network
+        (no separate network isolation)
+
+
+NONE
+Container
+   │
+   └── No network
 ```
-
-**That is why the configuration files can name services instead of addresses:**
-
-```text
-fastcgi_pass wordpress:9000;     nginx to php-fpm
---host=mariadb                   wp-cli to the database
-WP_REDIS_HOST redis              WordPress to the cache
-```
-
-**Addresses would not survive a restart.** They are handed out in start order, so `172.18.0.2` belongs to whichever container came up first. Names are stable, addresses are not.
-
-> ⚠️ **nginx resolves those names only once, when it parses its configuration.** Recreate the wordpress container and it gets a new address, while nginx keeps calling the old one and answers `502`, with `connect() failed (111: Connection refused)` in its error log. Restarting nginx fixes it. Worth knowing before someone recreates a container in front of you.
 
 <br>
 
-**The two forbidden alternatives, and why they are forbidden:**
-
-| | What it does | Why the subject rejects it |
-|:--|:--|:--|
-| `network: host` | the container shares the host's network namespace | no isolation at all, and every port collision comes back |
-| `links:` | the legacy mechanism, writes entries into `/etc/hosts` | deprecated by Docker itself, a user-defined network replaces it with real DNS |
-
-</details>
-
----
-
-<a id="c--publishing-a-port"></a>
-<details>
-<summary><h2>c · Publishing a port</h2></summary>
-
-**Nothing on the bridge is reachable from outside the host by default.** `172.18.0.8` is an address on a private virtual network, so a browser on another machine has no route to it.
-
-**`ports:` is what opens a door**, and what it creates is a translation rule on the host:
-
-```yaml
-    ports: ["443:443"]
-```
+**In this project:**
 
 ```text
-browser → host 0.0.0.0:443 → rule → 172.18.0.8:443 inside nginx
-          ^ host side                ^ container side
+             inception network
+        ┌─────────────────────────┐
+        │                         │
+      nginx ─── wordpress ─── mariadb
+        │            │
+        │            └── redis
+        │
+        └── adminer
+        └── netdata
+        └── resume
 ```
 
-**Left is the host, right is the container**, and they are two different namespaces, which is why the numbers may differ. The resume container listens on 1337 and is published as `1337:1337`; if it were published as `8080:1337`, the site would answer on 8080 from outside while nothing inside ever heard of 8080.
-
-**Only four services publish anything in this project:**
-
-```text
-nginx     443:443                       the sole entrypoint, as the subject demands
-resume    1337:1337                     bonus static site
-netdata   19999:19999                   bonus dashboard
-ftp       21:21 and 21100-21110:21100-21110
-```
-
-**mariadb, wordpress, redis and adminer publish nothing.** They are reachable by name from inside the network and unreachable from the host, which is exactly what is wanted: the database is never exposed, and php-fpm is only ever spoken to by nginx.
-
-> ⚠️ **The ftp range is published one to one on purpose.** FTP announces port numbers inside its own replies, so a remapped port would have the server advertise one number while the client reaches another. § 14 d covers it.
-
-</details>
+> **In my project, I use a custom bridge network called `inception`, which allows my containers to communicate with each other by service name.**
 
 </details>
 
