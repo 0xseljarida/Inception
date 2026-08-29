@@ -14,6 +14,7 @@
     * [d · cgroups, what it uses](#d--cgroups-what-it-uses)
     * [e · Conclusion](#e--conclusion)
 * [03 · Docker](#03--docker)
+    * [a · Where Docker came from](#a--where-docker-came-from)
 * [04 · Docker image](#04--docker-image)
     * [a · Definition](#a--definition)
     * [b · Docker images vs. containers](#b--docker-images-vs-containers)
@@ -303,9 +304,23 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 <summary><h1>03 · Docker</h1></summary>
 
 
-> **Docker is a tool that builds, ships and runs containers.**
+> **Docker is a platform for building, shipping and running containers.**
+>
+> It provides no isolation of its own. It drives features that already exist in the Linux kernel: **namespaces** for isolation, **cgroups** for limits, and a **union filesystem** (OverlayFS) for layered images.
+>
+> It is **client and server**. The `docker` CLI is just an HTTP client; it sends every command to a daemon, `dockerd`, which builds images from Dockerfiles, pulls and pushes them to registries, and delegates the actual container creation down to `containerd` and `runc`.
+>
+> A container is **not a virtual machine**. No OS boots, no hardware is emulated. Every container is an ordinary process sharing the host's kernel, which is why it starts instantly and costs almost nothing in memory.
 
-LXC could already run a container, but you still had to assemble its filesystem by hand, choose the namespaces, wire the network, then repeat all of it on every machine. There was no way to hand someone a finished environment.
+**In short:** containers are an operating-system feature. On Linux that's namespaces + cgroups, and Docker is a very good tool for using them.
+
+
+<a id="a--where-docker-came-from"></a>
+<details>
+<summary><h2>a · Where Docker came from</h2></summary>
+
+
+**LXC could already run a container**, but you still had to assemble its filesystem by hand, choose the namespaces, wire the network, then repeat all of it on every machine. There was no way to hand someone a finished environment.
 
 > **Isolation was solved. Distribution wasn't.**
 
@@ -322,20 +337,8 @@ LXC could already run a container, but you still had to assemble its filesystem 
 
 **Docker still wasn't touching the kernel yet.** It drove LXC until version 0.9 in March 2014, when `libcontainer`, written in Go, became the default execution driver and LXC dropped to an optional one. That component is what became `runc`.
 
-> **In short:** containers are an operating-system feature. On Linux that's namespaces + cgroups, and Docker is a very good tool for using them.
 
-<br>
-
-**If a corrector asks "what is Docker?":**
-
-> **Docker is a platform for building, shipping and running containers.**
->
-> It provides no isolation of its own. It drives features that already exist in the Linux kernel: **namespaces** for isolation, **cgroups** for limits, and a **union filesystem** (OverlayFS) for layered images.
->
-> It is **client and server**. The `docker` CLI is just an HTTP client; it sends every command to a daemon, `dockerd`, which builds images from Dockerfiles, pulls and pushes them to registries, and delegates the actual container creation down to `containerd` and `runc`.
->
-> A container is **not a virtual machine**. No OS boots, no hardware is emulated. Every container is an ordinary process sharing the host's kernel, which is why it starts instantly and costs almost nothing in memory.
-
+</details>
 
 </details>
 
