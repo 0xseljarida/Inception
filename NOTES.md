@@ -89,6 +89,9 @@ Three options existed:
 
 **Containers exist for density and isolation**, not to replace VMs.
 
+<p align="center"><img src="assets/Docke-vs-VM.png" width="500"></p>
+<p align="center"><i>containers share one OS · VMs each carry their own</i></p>
+
 | | Virtual Machine | Container |
 |:--|:--|:--|
 | **Memory** | a lot, a full OS each | far less, only the app |
@@ -927,6 +930,12 @@ entrypoint        wp core install                needs the volume, mounted at ru
 ```
 
 **Everything put in the image is done once and cached.** Everything put in the entrypoint is redone at every container start, which is why anything placed there needs a guard against running twice.
+
+<br>
+
+### Read about PID 1 and the best practices for writing Dockerfiles.
+
+**PID 1 is the container's main process, so making it the actual service gives Docker direct control over that service's lifecycle and signals.**
 
 </details>
 
