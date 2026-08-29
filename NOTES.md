@@ -3784,13 +3784,7 @@ Sources: [What is Docker Compose?](https://docs.docker.com/get-started/docker-co
 <summary><h2>b · An image used with Compose vs. without</h2></summary>
 
 
-**The image itself does not change.** A `Dockerfile` produces the same layered image whether it is built by `docker build` or by Compose's `build:` key, § 06 a covers what actually produces a layer, and that process is identical either way.
-
-**What changes is everything around the image.** `docker run` needs every flag typed by hand and repeated on every machine, the network, the volumes, the env file, the restart policy, one line each, in the right order. § 07's "what it replaces" box has the full command for just one container of this project. Compose reads that same information once from `docker-compose.yml` and reconciles it declaratively: `docker compose up` compares the file against what is running and only changes the difference, so running it twice does nothing the second time, where a repeated `docker run` would either fail on a name clash or create a duplicate container.
-
-**Naming differs too.** An image built by `docker build -t name .` gets whatever tag was typed by hand. An image built through Compose is named `<project>-<service>` automatically unless `image:` overrides it, which is why this project's Compose file must name every image after its service explicitly.
-
-> **In one sentence:** the image is identical either way; Compose is the layer that remembers how to run it, so the same image goes from "one long command to retype correctly every time" to "one line in a file that reconciles itself."
+> **There is no difference in the Docker image itself. A Docker image is the same whether I run it with `docker run` or Docker Compose. The difference is how we configure and run it. With `docker run`, I specify the options through command-line arguments. With Compose, I describe those options in the YAML file, and Compose sends the corresponding requests to Docker.**
 
 Sources: [What is a Dockerfile?](https://docs.docker.com/get-started/docker-concepts/building-images/writing-a-dockerfile/) · [What is Docker Compose?](https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-docker-compose/)
 
