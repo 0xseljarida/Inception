@@ -89,7 +89,7 @@ Three options existed:
 
 **Containers exist for density and isolation**, not to replace VMs.
 
-<p align="center"><img src="assets/Docke-vs-VM.png" width="500"></p>
+<p align="center"><img src="assets/Docke-vs-VM.png" width="800"></p>
 <p align="center"><i>containers share one OS · VMs each carry their own</i></p>
 
 | | Virtual Machine | Container |
