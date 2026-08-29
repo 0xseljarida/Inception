@@ -9,13 +9,11 @@ body {
   background: #fafafa;
 }
 
-/* the name */
 h1 {
   margin-bottom: 0.2em;
   font-size: 2em;
 }
 
-/* section titles, with a line under them */
 h2 {
   margin-top: 2em;
   padding-bottom: 0.3em;
@@ -23,13 +21,11 @@ h2 {
   font-size: 1.2em;
 }
 
-/* project titles */
 h3 {
   margin-bottom: 0.2em;
   font-size: 1em;
 }
 
-/* the two grey lines of small text */
 header p, footer {
   color: #666;
   font-size: 0.9em;
