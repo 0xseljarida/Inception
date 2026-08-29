@@ -10,9 +10,6 @@ COPY conf/www.conf /etc/php/8.2/fpm/pool.d/www2.conf
 
 ADD --chmod=644 https://github.com/vrana/adminer/releases/download/v6.0.1/adminer-6.0.1-mysql-en.php /var/www/adminer/index.php
 
-# ADD applies --chmod to the directories it creates too, so /var/www and
-# /var/www/adminer come out as 644 and cannot be traversed. Put the execute
-# bit back, or php-fpm answers 'File not found' on a file that exists.
 RUN chmod 755 /var/www /var/www/adminer \
 	&& chown -R www-data:www-data /var/www/adminer
 
