@@ -2281,6 +2281,27 @@ RUN mkdir -p /etc/nginx/ssl \
         -subj "/C=MA/ST=BENGUERIR/L=BENGUERIR/O=1337/OU=42/CN=sel-jari.42.fr"
 ```
 
+<details>
+<summary><b>The command, flag by flag</b></summary>
+
+<br>
+
+```text
+openssl req
+    │
+    ├── -x509       → create a self-signed certificate
+    ├── -nodes      → don't encrypt the private key
+    ├── -newkey     → generate a new private key
+    │      └── rsa:2048 → RSA key, 2048 bits
+    ├── -days       → certificate validity period
+    │      └── 365
+    ├── -keyout     → where to save the private key
+    ├── -out        → where to save the certificate
+    └── -subj       → certificate identity information
+```
+
+</details>
+
 > **A certificate is a public key bound to an identity, plus a signature over that binding.**
 
 **The two files are the two halves of one key pair.** `openssl` generates both in a single command:
