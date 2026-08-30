@@ -1,0 +1,35 @@
+1960s–70s
+Mainframes
+└── Many users sharing one computer
+
+1980s
+Unix servers
+└── Multiple users / applications on one machine
+
+1990s · Web begins
+└── One physical server
+    ├── Website A
+    ├── Website B
+    └── Website C
+    → "Shared hosting"
+
+Late 1990s–2000s
+└── Dedicated servers + colocation
+    → Rent a whole server or put your own server in a data center
+
+2000s
+└── Virtualization becomes common
+    Physical server
+    ├── VM
+    ├── VM
+    └── VM
+
+2010s
+└── Containers / Docker
+    Physical server
+    ├── Container
+    ├── Container
+    └── Container
+
+
+true-crime documentary : "Cyberbunker: The Criminal Underworld" about a dark-web hosting center. good one.
