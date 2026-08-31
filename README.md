@@ -77,7 +77,7 @@ Three options existed:
 
 > **Can one machine host many isolated tenants without pretending to be 200 machines?**
 
-**Containers are the answer.** Keep one operating system, and make the kernel **restrict what each process can see of the machine**. A container is just a process. 
+**Containerization are the answer.** Keep one operating system, and make the kernel **restrict what each process can see of the machine**. A container is just a process. 
 
 > **Note:** the "200 customers" framing above is a teaching device, not history.
 > A 2005 host would have answered "shared hosting".
@@ -323,7 +323,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 >
 > A container is **not a virtual machine**. No OS boots, no hardware is emulated. Every container is an ordinary process sharing the host's kernel, which is why it starts instantly and costs almost nothing in memory.
 
-**In short:** containers are an operating-system feature. On Linux that's namespaces + cgroups, and Docker is a very good tool for using them.
+**In short:** containerization on Linux is built from kernel features such as namespaces and cgroups , and Docker is a very good tool for using them.
 
 
 <a id="a--where-docker-came-from"></a>
