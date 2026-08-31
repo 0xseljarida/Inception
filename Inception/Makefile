@@ -1,10 +1,10 @@
 NAME		= inception
 
 COMPOSE		= docker compose -f srcs/docker-compose.yml
-VOLUMES		= /home/sel-jari/data/mariadb /home/sel-jari/data/wordpress
+VOLUMES		= /home/login/data/mariadb /home/login/data/wordpress
 
-DOMAIN		= sel-jari.42.fr
-RESUME		= sel-jari.resume.42.fr
+DOMAIN		= login.42.fr
+RESUME		= login.resume.42.fr
 HOSTS_LINE	= 127.0.0.1 $(DOMAIN) $(RESUME)
 
 all: up

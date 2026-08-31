@@ -13,7 +13,7 @@ plugin v5.5.0. Use `docker compose`, never `docker-compose`.
 ### 1. Install Docker Engine
 
 Do not use Docker Desktop here. It runs the engine inside a Linux VM, so
-`device: /home/sel-jari/data/...` would resolve inside that VM rather than on the
+`device: /home/login/data/...` would resolve inside that VM rather than on the
 real filesystem, and the volume setup the subject asks for would break. Install
 Docker CE directly:
 
@@ -45,7 +45,7 @@ docker run --rm debian:bookworm true
 
 ```bash
 make hosts                          # appends the line, guarded, asks for sudo
-getent hosts sel-jari.42.fr sel-jari.resume.42.fr
+getent hosts login.42.fr login.resume.42.fr
 ```
 
 `hosts` is kept out of `up` on purpose, because `make` should never ask for a
@@ -264,7 +264,7 @@ docker volume ls
 docker volume inspect srcs_wordpress_volume | grep -i device
 docker compose -f srcs/docker-compose.yml down       # containers only, volumes kept
 docker compose -f srcs/docker-compose.yml down -v    # volume objects removed too
-sudo rm -rf /home/sel-jari/data/mariadb /home/sel-jari/data/wordpress
+sudo rm -rf /home/login/data/mariadb /home/login/data/wordpress
 ```
 
 Compose prefixes volume names with the project name, the directory holding the
@@ -284,7 +284,7 @@ comes back with the old password.
 ## Where the data lives, and how it persists
 
 ```text
-/home/sel-jari/data/
+/home/login/data/
 ├── mariadb/       <- srcs_mariadb_volume    -> /var/lib/mysql
 │   ├── mysql/                system tables
 │   ├── wordpress/            the project database
@@ -301,7 +301,7 @@ outlive it is written under a mount point:
 ```text
 container writes /var/lib/mysql
    -> mount namespace: that path is a bind mount
-   -> /home/sel-jari/data/mariadb on the host filesystem
+   -> /home/login/data/mariadb on the host filesystem
 ```
 
 `wordpress_volume` is mounted into **two** containers: php-fpm executes the PHP
@@ -333,7 +333,7 @@ does not recreate the database or reset the WordPress users.
 
 ```bash
 make down && make up
-curl -k https://sel-jari.42.fr        # same site, same posts, same users
+curl -k https://login.42.fr        # same site, same posts, same users
 ```
 
 And `make fclean` followed by `make` proves a clean first boot still works.

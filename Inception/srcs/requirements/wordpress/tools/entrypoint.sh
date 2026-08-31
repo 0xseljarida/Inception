@@ -32,7 +32,7 @@ if [ ! -f "/var/www/html/wp-config.php" ]; then
 	--allow-root
 
 	wp core install \
-	--url=https://sel-jari.42.fr \
+	--url=https://login.42.fr \
 	--title="Inception" \
 	--admin_user=saad \
 	--admin_password=$ADMIN_PASSWORD \

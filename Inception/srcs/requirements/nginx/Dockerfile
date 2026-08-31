@@ -7,9 +7,9 @@ RUN apt-get update \
 
 RUN mkdir -p /etc/nginx/ssl \
     && openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
-        -keyout /etc/nginx/ssl/sel-jari.key \
-        -out    /etc/nginx/ssl/sel-jari.crt \
-        -subj "/C=MA/ST=BENGUERIR/L=BENGUERIR/O=1337/OU=42/CN=sel-jari.42.fr"
+        -keyout /etc/nginx/ssl/login.key \
+        -out    /etc/nginx/ssl/login.crt \
+        -subj "/C=MA/ST=BENGUERIR/L=BENGUERIR/O=4242/OU=42/CN=login.42.fr"
 
 
 COPY conf/default.conf /etc/nginx/conf.d/
