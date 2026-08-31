@@ -131,10 +131,10 @@ Three options existed:
 
 **Two kernel features enforce this:**
 
-| | Controls | Purpose |
-|:--|:--|:--|
-| **Namespaces** | what a process can **see** | isolation |
-| **cgroups** | what a process can **use** | limits |
+| Feature        | Controls                   | Purpose         |
+| :------------- | :------------------------- | :-------------- |
+| **Namespaces** | what a process can **see** | isolation       |
+| **cgroups**    | what a process can **use** | resource limits |
 
 
 <a id="a--containers-are-much-older-than-docker"></a>
