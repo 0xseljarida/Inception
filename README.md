@@ -77,7 +77,7 @@ Three options existed:
 
 > **Can one machine host many isolated tenants without pretending to be 200 machines?**
 
-**Containerization are the answer.** Keep one operating system, and make the kernel **restrict what each process can see of the machine**. A container is just a process. 
+> **Containerization is the answer.** Keep one operating system and use the kernel to **isolate and control what each process can see and use**. The result is what we call a **container**, which is essentially an isolated process.
 
 > **Note:** the "200 customers" framing above is a teaching device, not history.
 > A 2005 host would have answered "shared hosting".
