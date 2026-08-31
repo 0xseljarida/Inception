@@ -1013,7 +1013,7 @@ The kernel knows nothing about the right-hand column. MariaDB knows nothing abou
 
 ### The practical consequence for volumes
 
-**UIDs are numbers, and they cross the boundary unchanged.** A file written by UID 999 inside the container appears on the host as owned by whatever host account happens to be UID 999. Since Inception's volumes resolve to real host directories under `/home/sel-jari/data/`, ownership there is decided by which account the container process dropped to, not by who ran `docker compose`.
+**UIDs are numbers, and they cross the boundary unchanged.** A file written by UID 999 inside the container appears on the host as owned by whatever host account happens to be UID 999. Since Inception's volumes resolve to real host directories under `/home/login/data/`, ownership there is decided by which account the container process dropped to, not by who ran `docker compose`.
 
 </details>
 
@@ -1187,7 +1187,7 @@ credentials      ←──   ../secrets/credentials.txt   ──→  /run/secret
 
 **Both are mandatory, for different data.** `.env` is required and holds non-secret configuration such as `DOMAIN_NAME` and `MYSQL_USER`, which the subject's own example `.env` shows. Passwords go through `secrets:`, and `secrets/` is gitignored.
 
-**Two of these carry the project's hard constraints.** `driver_opts` under a top-level volume is what pins a named volume to `/home/sel-jari/data/` (`type: none`, `o: bind`, `device:` an absolute host path), and a user-defined network is what provides DNS at all:
+**Two of these carry the project's hard constraints.** `driver_opts` under a top-level volume is what pins a named volume to `/home/login/data/` (`type: none`, `o: bind`, `device:` an absolute host path), and a user-defined network is what provides DNS at all:
 
 > Containers on the default bridge network can only access each other by IP addresses, unless you use the `--link` option, which is considered legacy.
 >
@@ -1914,7 +1914,7 @@ tools/entrypoint.sh     what happens on every container start
 
 ```
               named volume: the WordPress files
-              /home/sel-jari/data/wordpress
+              /home/login/data/wordpress
                           │
         ┌─────────────────┴─────────────────┐
         ▼                                   ▼
@@ -2068,7 +2068,7 @@ wp-cli                                php CLI → WordPress code → mariadb
 
 > "If you mount an *empty volume* into a directory in the container in which files or directories exist, these files or directories are propagated (copied) into the volume by default."
 
-**It happens exactly once.** The same page continues: *"If you mount a non-empty volume [...] the pre-existing files are obscured by the mount."* Once `/home/sel-jari/data/wordpress` holds anything, rebuilding the image will never refresh it. That is correct behaviour for a CMS, since the volume owns the content, but it is also why the entrypoint still needs a guard of its own.
+**It happens exactly once.** The same page continues: *"If you mount a non-empty volume [...] the pre-existing files are obscured by the mount."* Once `/home/login/data/wordpress` holds anything, rebuilding the image will never refresh it. That is correct behaviour for a CMS, since the volume owns the content, but it is also why the entrypoint still needs a guard of its own.
 
 </details>
 
@@ -2148,7 +2148,7 @@ chown -R www-data:www-data /var/www/html
 
 **Skipping it fails silently.** The site loads, because reading is allowed. Uploads, plugin installs and updates are the things that break.
 
-**UID 33 then appears on the host.** As § 06 f says, UIDs cross the boundary unchanged, and copy-up preserves them, so `ls -l /home/sel-jari/data/wordpress` shows UID 33 rather than `sel-jari`. That is correct, not a bug.
+**UID 33 then appears on the host.** As § 06 f says, UIDs cross the boundary unchanged, and copy-up preserves them, so `ls -l /home/login/data/wordpress` shows UID 33 rather than `login`. That is correct, not a bug.
 
 </details>
 
@@ -2276,9 +2276,9 @@ nginx: configuration file /etc/nginx/nginx.conf test failed
 ```dockerfile
 RUN mkdir -p /etc/nginx/ssl \
     && openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
-        -keyout /etc/nginx/ssl/sel-jari.key \
-        -out    /etc/nginx/ssl/sel-jari.crt \
-        -subj "/C=MA/ST=BENGUERIR/L=BENGUERIR/O=1337/OU=42/CN=sel-jari.42.fr"
+        -keyout /etc/nginx/ssl/login.key \
+        -out    /etc/nginx/ssl/login.crt \
+        -subj "/C=MA/ST=BENGUERIR/L=BENGUERIR/O=4242/OU=42/CN=login.42.fr"
 ```
 
 <details>
@@ -2307,19 +2307,19 @@ openssl req
 **The two files are the two halves of one key pair.** `openssl` generates both in a single command:
 
 ```text
-sel-jari.key   the private key    stays in the container, never sent to anyone
-sel-jari.crt   the certificate    the public key + the identity + a signature, sent to every browser
+login.key   the private key    stays in the container, never sent to anyone
+login.crt   the certificate    the public key + the identity + a signature, sent to every browser
 ```
 
-**Normally the signature comes from a certificate authority**, which verifies you control the domain before signing. No authority will ever sign `sel-jari.42.fr`, so the key signs its own certificate. RFC 5280 defines that case directly:
+**Normally the signature comes from a certificate authority**, which verifies you control the domain before signing. No authority will ever sign `login.42.fr`, so the key signs its own certificate. RFC 5280 defines that case directly:
 
 > Self-signed certificates are self-issued certificates where the digital signature may be verified by the public key bound into the certificate.
 
 **Which is exactly what the output shows:**
 
 ```text
-subject = ... CN = sel-jari.42.fr
-issuer  = ... CN = sel-jari.42.fr      ← the same name, nothing above it
+subject = ... CN = login.42.fr
+issuer  = ... CN = login.42.fr      ← the same name, nothing above it
 ```
 
 **The browser warning follows from that, and is expected.** A browser trusts a certificate by walking up the chain to a root it already holds. Here there is no chain, so verification stops immediately with a self-signed error. Clicking through it is the normal demonstration for this project.
@@ -2346,7 +2346,7 @@ issuer  = ... CN = sel-jari.42.fr      ← the same name, nothing above it
 **Modern browsers no longer read `CN` for that, though.** They match the URL against the `subjectAltName` extension, and the command above produces a certificate with no `subjectAltName` at all, measured with `openssl x509 -noout -text`. Chrome removed the `CN` fallback in version 58, calling it deprecated by RFC 2818 *"for nearly two decades"*. Adding the extension is one more option:
 
 ```
--addext "subjectAltName=DNS:sel-jari.42.fr"
+-addext "subjectAltName=DNS:login.42.fr"
 ```
 
 **It changes nothing about the warning.** The certificate is still self-signed, so the browser still refuses to trust it. The extension only makes the *name* correct, turning two complaints back into one.
@@ -2466,9 +2466,9 @@ RUN apt-get update \
 
 RUN mkdir -p /etc/nginx/ssl \
     && openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
-        -keyout /etc/nginx/ssl/sel-jari.key \
-        -out    /etc/nginx/ssl/sel-jari.crt \
-        -subj "/C=MA/ST=BENGUERIR/L=BENGUERIR/O=1337/OU=42/CN=sel-jari.42.fr"
+        -keyout /etc/nginx/ssl/login.key \
+        -out    /etc/nginx/ssl/login.crt \
+        -subj "/C=MA/ST=BENGUERIR/L=BENGUERIR/O=4242/OU=42/CN=login.42.fr"
 
 COPY conf/default.conf /etc/nginx/conf.d/
 
@@ -2497,10 +2497,10 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
 
-    server_name sel-jari.42.fr;
+    server_name login.42.fr;
 
-    ssl_certificate     /etc/nginx/ssl/sel-jari.crt;
-    ssl_certificate_key /etc/nginx/ssl/sel-jari.key;
+    ssl_certificate     /etc/nginx/ssl/login.crt;
+    ssl_certificate_key /etc/nginx/ssl/login.key;
     ssl_protocols TLSv1.2 TLSv1.3;
 
     root /var/www/html/;
@@ -2601,16 +2601,16 @@ nginx: configuration file /etc/nginx/nginx.conf test failed
 
 </details>
 
-**No DNS server anywhere knows `sel-jari.42.fr`.** `/etc/hosts` is a plain name-to-address table the resolver consults before asking DNS, so one line is enough:
+**No DNS server anywhere knows `login.42.fr`.** `/etc/hosts` is a plain name-to-address table the resolver consults before asking DNS, so one line is enough:
 
 ```
-127.0.0.1   sel-jari.42.fr
+127.0.0.1   login.42.fr
 ```
 
 **`127.0.0.1` is loopback, meaning this machine.** The request therefore never leaves the host:
 
 ```
-browser asks for sel-jari.42.fr
+browser asks for login.42.fr
    │ /etc/hosts answers 127.0.0.1
    ▼
 this machine, port 443        ← published by ports: ["443:443"]
@@ -2618,7 +2618,7 @@ this machine, port 443        ← published by ports: ["443:443"]
 nginx container
 ```
 
-**The name has to match the certificate's `CN`.** Reaching the same server through `https://localhost` connects fine but adds a second browser warning, because the certificate says `sel-jari.42.fr` and the URL does not.
+**The name has to match the certificate's `CN`.** Reaching the same server through `https://localhost` connects fine but adds a second browser warning, because the certificate says `login.42.fr` and the URL does not.
 
 </details>
 
@@ -2671,7 +2671,7 @@ wordpress   /var/www/html      the PHP files and wp-content/uploads
 
 ```yaml
 volumes:
-  - /home/sel-jari/data/mariadb:/var/lib/mysql   ← bind mount
+  - /home/login/data/mariadb:/var/lib/mysql   ← bind mount
   - mariadb_data:/var/lib/mysql                  ← named volume
 ```
 
@@ -2692,7 +2692,7 @@ $ docker volume create probe_tmp && docker volume inspect probe_tmp
 
 **Copy-up is the behaviour that matters for wordpress.** Mounting an *empty* named volume over a directory that already has files in the image copies those files into the volume. A bind mount never does this, it simply hides whatever was underneath. That is why `wp core download` can run at build time and the files still reach the volume, which § 09 b covers.
 
-**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/sel-jari/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and § 11 c is how both are satisfied.
+**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/login/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and § 11 c is how both are satisfied.
 
 </details>
 
@@ -2728,7 +2728,7 @@ volumes:
     driver_opts:
       type: none                              no filesystem to create, pass through
       o: bind                                 mount it as a bind
-      device: /home/sel-jari/data/mariadb     the host directory to use
+      device: /home/login/data/mariadb     the host directory to use
 ```
 
 **It is still a named volume.** `docker volume ls` lists it, `docker volume rm` removes it, and copy-up still applies. Only the location changed.
@@ -2737,7 +2737,7 @@ volumes:
 
 ```
 failed to mount local volume:
-  mount /home/sel-jari/data/does-not-exist:/var/lib/docker/volumes/..._data
+  mount /home/login/data/does-not-exist:/var/lib/docker/volumes/..._data
   no such file or directory
 ```
 
@@ -2850,11 +2850,11 @@ Container
 
 <br>
 
-**There is one thing Compose cannot do for itself, and it is the reason `up` has a prerequisite.** As § 11 c shows, `type: none` creates no directory: if `/home/sel-jari/data/mariadb` is missing, the volume fails to mount and the container never starts. The Makefile has to create both directories first.
+**There is one thing Compose cannot do for itself, and it is the reason `up` has a prerequisite.** As § 11 c shows, `type: none` creates no directory: if `/home/login/data/mariadb` is missing, the volume fails to mount and the container never starts. The Makefile has to create both directories first.
 
 ```make
 COMPOSE		= docker compose -f srcs/docker-compose.yml
-DATA_DIR	= /home/sel-jari/data
+DATA_DIR	= /home/login/data
 VOLUMES		= $(DATA_DIR)/mariadb $(DATA_DIR)/wordpress
 
 all: up
@@ -3024,10 +3024,10 @@ Every `<link href="css/style.css">` would then return 404.
 
 ```nginx
 server {
-	listen 1337;
-	listen [::]:1337;
+	listen 4242;
+	listen [::]:4242;
 
-	server_name sel-jari.resume.42.fr;
+	server_name login.resume.42.fr;
 
 	root /var/www/static/;
 
@@ -3042,7 +3042,7 @@ server {
 **`server_name` is decorative in this container.** It selects between competing `server` blocks listening on the same address and port, and this container has exactly one block, so every request lands here whatever the `Host` header says. For the name to work in a browser it also has to resolve, which means a line on the host:
 
 ```text
-127.0.0.1       sel-jari.42.fr sel-jari.resume.42.fr
+127.0.0.1       login.42.fr login.resume.42.fr
 ```
 
 **No `try_files` is needed.** The static file module already returns 404 when the file is missing. `try_files $uri $uri/ =404;` makes that explicit and matters once there are rewrites, which there are none of here.
@@ -3061,12 +3061,12 @@ server {
     build: ./requirements/bonus/resume
     networks: [inception]
     restart: unless-stopped
-    ports: ["1337:1337"]
+    ports: ["4242:4242"]
 ```
 
 **Port 80 inside the container would have been fine too.** Each container has its own network namespace, so it has its own set of port numbers: the resume container's port 80 and the mandatory nginx's port 80 are two different things and cannot collide.
 
-**What must not be taken is host port 80.** The subject makes nginx the only entrypoint on 443, so an open port 80 on the host reads as a second, plain HTTP entrypoint into the infrastructure. Publishing `1337:1337` keeps the mandatory rule intact and still reaches the site.
+**What must not be taken is host port 80.** The subject makes nginx the only entrypoint on 443, so an open port 80 on the host reads as a second, plain HTTP entrypoint into the infrastructure. Publishing `4242:4242` keeps the mandatory rule intact and still reaches the site.
 
 </details>
 
@@ -3326,7 +3326,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 **`WP_REDIS_PORT` is not set** because the plugin defaults to 6379.
 
-**Verified on a cold boot**, from an empty `/home/sel-jari/data`:
+**Verified on a cold boot**, from an empty `/home/login/data`:
 
 ```text
 Status: Connected
@@ -3638,7 +3638,7 @@ docker inspect srcs-netdata-1 --format '{{.Path}} {{.Args}}'
 
 <br>
 
-**Verified on a cold boot**, from an empty `/home/sel-jari/data` with every image rebuilt:
+**Verified on a cold boot**, from an empty `/home/login/data` with every image rebuilt:
 
 ```text
 resume 200   wordpress 200   wp-admin 302   adminer 200   netdata 200

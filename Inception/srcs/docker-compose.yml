@@ -35,7 +35,7 @@ services:
     build: ./requirements/bonus/resume
     networks: [inception]
     restart: unless-stopped
-    ports: ["1337:1337"]
+    ports: ["4242:4242"]
 
 
   adminer:
@@ -78,10 +78,10 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /home/sel-jari/data/mariadb
+      device: /home/login/data/mariadb
 
   wordpress_volume:
     driver_opts:
       type: none
       o: bind
-      device: /home/sel-jari/data/wordpress
+      device: /home/login/data/wordpress
