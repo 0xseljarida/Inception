@@ -165,13 +165,11 @@ Three options existed:
 
 > **A namespace is a kernel object that holds one instance of a global system resource.**
 
-**The kernel normally keeps exactly one of each resource:** one process table, one network stack, one mount tree, one hostname. A namespace is another one of those, allocated in kernel memory as a struct with a type and a reference count. A process belongs to a namespace because its `task_struct` points at that object, which § 02 c covers.
+**The kernel normally keeps exactly one of each resource:** one process table, one network stack, one mount tree, one hostname. A namespace is another one of those, allocated in kernel memory as a struct with a type and a reference count.
 
 **That structure is the definition. The isolation is its consequence:**
 
 > **A namespace gives a process its own private view of one part of the system.**
-
-Instead of one global process list, one global network, one global hostname, the kernel keeps a second copy and hands it to the process. **The process has no way to detect the copy.** It queries the kernel and gets the private view back.
 
 **Why use them?**
 
