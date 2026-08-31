@@ -15,3 +15,7 @@ Linux kernel mechanisms used to implement it.
 **Docker / LXC**  
 ↓  
 Tools that create and manage containers.
+
+
+read more about : operating-system-virtualization/containerization
+https://en.wikipedia.org/wiki/OS-level_virtualization
