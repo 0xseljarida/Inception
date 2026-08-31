@@ -220,43 +220,6 @@ stop would burn the full ten-second timeout before SIGKILL.
 No `tail -f`, `sleep infinity`, `while true` or bare `bash` appears anywhere,
 entrypoints included.
 
-### Implementation notes
-
-The things that were not obvious the first time:
-
-- The Debian nginx package ships `sites-enabled/default`, which owns port 80 as
-  `default_server`. The Dockerfile deletes that symlink.
-- Debian's `nginx.conf` sets `ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3`, so
-  the server block overrides it with `TLSv1.2 TLSv1.3`.
-- php-fpm loads `pool.d/*.conf` in glob order and pools with the same name merge,
-  last value winning. `www2.conf` re-declares `[www]` with
-  `listen = 0.0.0.0:9000` without editing the packaged file. MariaDB reads
-  `mariadb.conf.d/*.cnf` the same way.
-- There is no init system in a container, so nothing recreates `/run`. The
-  MariaDB entrypoint must `mkdir -p /run/mysqld` and chown it itself.
-- `redis-server` reads `/etc/redis/redis.conf` only when the path is its first
-  argument. Passing none starts it from built-in defaults, which avoids the
-  packaged `daemonize yes` and `bind 127.0.0.1`.
-- The WordPress side of redis is three commands in the entrypoint, *after*
-  `wp core install`: install the `redis-cache` plugin, set `WP_REDIS_HOST`, then
-  `wp redis enable`. Before the install they fail with `The site you have
-  requested is not installed.`
-- adminer is routed with `location ^~ /adminer/`. The `^~` matters: nginx checks
-  regex locations before prefix ones, so without it `/adminer/index.php` would
-  match `location ~ \.php$` and go to the WordPress container.
-- resume uses `COPY ./srcs/ /var/www/static`, the directory and not `srcs/*`: the
-  glob flattens subdirectories, landing `srcs/css/style.css` at
-  `/var/www/static/style.css` and 404-ing every stylesheet.
-- netdata declares no mounts and no environment variables. Its documentation asks
-  for the host `/proc` and `/sys` with `NETDATA_HOST_PREFIX=/host`, but measuring
-  here gave the same 257 charts either way: Docker already mounts the host
-  `sysfs`, and `/proc/stat`, `/proc/meminfo` and `/proc/uptime` are not
-  namespaced. Per-container metrics were dropped on purpose, because they need
-  `/var/run/docker.sock` and `pid: host`. A writable Docker socket is effectively
-  root on the host, and `:ro` does not restrain it.
-
----
-
 ## Managing volumes
 
 ```bash
