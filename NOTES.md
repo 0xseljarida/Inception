@@ -155,6 +155,21 @@ Three options existed:
 
 **Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC .
 
+<details>
+<summary><h2>DEEPDIVE</h2></summary>
+
+### LXC
+
+Linux Containers (LXC) is an operating system-level virtualization method for running multiple isolated Linux systems (containers) on a control host using a single Linux kernel.
+
+The Linux kernel provides the cgroups functionality that allows limitation and prioritization of resources (CPU, memory, block I/O, network, etc.) without the need for starting any virtual machines, and also the namespace isolation functionality that allows complete isolation of an application's view of the operating environment, including process trees, networking, user IDs and mounted file systems.[3]
+
+LXC combines the kernel's cgroups and support for isolated namespaces to provide an isolated environment for applications.[4]
+
+Early versions of Docker used LXC as the container execution driver,[4] though LXC was replaced as the default in version 0.9.0[5][6] and was deprecated in 1.8.0,[7] before the driver was removed in 1.10.0.[8]
+
+[Wikipedia — LXC](https://en.wikipedia.org/wiki/LXC)
+</details>
 
 </details>
 
