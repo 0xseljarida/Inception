@@ -153,23 +153,21 @@ Three options existed:
 2013  Docker              built on LXC at first
 ```
 
-**Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC.
+**Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC .
 
 
 </details>
 
 <a id="b--namespaces-what-it-sees"></a>
 <details>
-<summary><h2>b · Namespaces, what it sees</h2></summary>
+<summary><h2>b · Namespaces </h2></summary>
 
 
-> **A namespace is a kernel object that holds one instance of a global system resource.**
+> **A namespace is a kernel mechanism that creates an isolated instance of a system resource.**
 
-**The kernel normally keeps exactly one of each resource:** one process table, one network stack, one mount tree, one hostname. A namespace is another one of those, allocated in kernel memory as a struct with a type and a reference count.
+**The kernel normally maintains system resources globally:** a single process table, network stack, mount tree, hostname, etc. A namespace creates a separate instance of one of these resources and associates it with a group of processes.
 
-**That structure is the definition. The isolation is its consequence:**
-
-> **A namespace gives a process its own private view of one part of the system.**
+**The result is isolation:** processes inside the namespace see and interact with their own instance rather than the host's global one.
 
 **Why use them?**
 
