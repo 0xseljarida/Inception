@@ -2834,7 +2834,7 @@ Container
 <summary><h1>13 · The Makefile</h1></summary>
 
 
-> **The Makefile is the only thing the evaluator runs. Everything else is reached through it.**
+> **The Makefile is the only thing you need to Run. Everything else is reached through it.**
 
 **The subject fixes the chain in one direction:**
 
@@ -2898,14 +2898,12 @@ fclean   the above, plus the volumes and the host data  (down -v)
 
 > **The bonus part is five extra services, each one an additional container built from its own Dockerfile.**
 
-**The bonus is only looked at once the mandatory part is perfect.** A single flaw in the three mandatory containers and the bonus is not evaluated at all, so nothing here is worth starting before the mandatory stack is finished and documented.
-
 <details>
 <summary><b>Proof from the subject</b></summary>
 
 <br>
 
-> The bonus part will only be assessed if the mandatory part is completed perfectly. Perfect means the mandatory part has been fully completed and functions without any malfunctions. If you have not passed ALL the mandatory requirements, your bonus part will not be evaluated at all.
+> The bonus part will only be assessed if the mandatory part is completed perfectly. Perfect means the mandatory part has been fully completed and functions without any malfunctions.
 >
 > <sub><i>the subject</i></sub>
 
@@ -3087,7 +3085,7 @@ server {
 
 > **Adminer is a database administration tool that ships as a single PHP file: it connects to a database server and exposes it as a web interface.**
 
-**It exists to replace a terminal client.** Instead of `mariadb -u wp_user -p` and typing SQL, the browser shows the databases, the tables, the rows, and lets them be edited. For this project it is a way to inspect the WordPress database that the evaluator can see.
+**It exists to replace a terminal client.** Instead of `mariadb -u wp_user -p` and typing SQL, the browser shows the databases, the tables, the rows, and lets them be edited. For this project it is a way to inspect the WordPress database.
 
 **Adminer is PHP, and that decides the architecture of the container.** PHP is not a server: something has to receive the HTTP request, and something has to execute the code. Those are two different programs, exactly as in § 09:
 
@@ -3544,8 +3542,6 @@ mounts + prefix          charts=257   battery=7   sda=5
 namespaced          /proc/<pid>, /proc/net, the process list
 NOT namespaced      /proc/stat, /proc/meminfo, /proc/uptime, /proc/cpuinfo
 ```
-
-**So they were removed.** Keeping configuration that demonstrably does nothing means keeping something that has to be explained and defended for no benefit, and every line in a Compose file is a line an evaluator can ask about. They would start to matter on a host that masks `/proc` and `/sys` more aggressively than Docker's default, which is the situation netdata's documentation is written against, and this is not that host.
 
 **The wider lesson is worth more than the setting.** A container is isolated in what it can *change*, far more than in what it can *see*.
 
