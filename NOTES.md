@@ -156,8 +156,8 @@ Three options existed:
 **Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC .
 
 <details>
-<summary><h2>DEEPDIVE</h2></summary>
-
+<summary><b>DEEPDIVE</b></summary>
+	
 ### LXC
 
 Linux Containers (LXC) is an operating system-level virtualization method for running multiple isolated Linux systems (containers) on a control host using a single Linux kernel.
