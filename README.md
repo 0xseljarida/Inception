@@ -312,15 +312,24 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 <summary><h1>03 · Docker</h1></summary>
 
 
-> **Docker is a platform for building, shipping and running containers.**
->
-> It provides no isolation of its own. It drives features that already exist in the Linux kernel: **namespaces** for isolation, **cgroups** for limits, and a **union filesystem** (OverlayFS) for layered images.
->
-> It is **client and server**. The `docker` CLI is just an HTTP client; it sends every command to a daemon, `dockerd`, which builds images from Dockerfiles, pulls and pushes them to registries, and delegates the actual container creation down to `containerd` and `runc`.
->
-> A container is **not a virtual machine**. No OS boots, no hardware is emulated. Every container is an ordinary process sharing the host's kernel, which is why it starts instantly and costs almost nothing in memory.
+At this point, Linux already gives us everything required to isolate a process. But having the mechanism is not the same as having a convenient way to use it.
 
-**In short:** containerization on Linux is built from kernel features such as namespaces and cgroups , and Docker is a very good tool for using them.
+To run an application this way by hand, someone still has to prepare its filesystem, collect its dependencies, create the namespaces and cgroups, configure its network, and repeat the same setup on every machine. The container works; the **workflow around it** is the missing part.
+
+That is where Docker fits:
+
+> **Docker is a platform that makes containers easy to build, share, and run in a repeatable way.**
+
+It turns the low-level pieces of containerization into a workflow a developer can use:
+
+1. **Describe** the application's environment in a `Dockerfile`.
+2. **Build** that environment into an image.
+3. **Share** the image through a registry.
+4. **Run** it as a container on any compatible host.
+
+Docker does not create the isolation itself. When it starts a container, Linux still does the real work through namespaces and cgroups. Docker prepares the environment, asks the kernel to apply those boundaries, and manages the result.
+
+> **Linux provides the container mechanism. Docker provides the tools and workflow around it.**
 
 
 <a id="a--where-docker-came-from"></a>
