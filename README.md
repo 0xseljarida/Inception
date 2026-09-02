@@ -1,6 +1,4 @@
 <h1 align="center">Inception · Notes</h1>
-<p align="center"><i>My understanding of the project. Written as I learn it.</i></p>
-
 ---
 
 ## Index
