@@ -3,108 +3,108 @@
 ## Index
 
 <details>
-<summary><a href="#01--why-containers-were-invented">01 · Why containers were invented</a></summary>
+<summary>01 · Why containers were invented</summary>
 
-* [a · Container vs Virtual Machine](#a--container-vs-virtual-machine)
-
-</details>
-
-<details>
-<summary><a href="#02--what-is-a-container">02 · What is a container?</a></summary>
-
-* [a · Containers are much older than Docker](#a--containers-are-much-older-than-docker)
-* [b · Namespaces, what it sees](#b--namespaces-what-it-sees)
-* [c · Where namespaces actually live](#c--where-namespaces-actually-live)
-* [d · cgroups, what it uses](#d--cgroups-what-it-uses)
-* [e · Conclusion](#e--conclusion)
+* a · Container vs Virtual Machine
 
 </details>
 
 <details>
-<summary><a href="#03--what-docker-is">03 · What Docker is</a></summary>
+<summary>02 · What is a container?</summary>
 
-* [a · Where Docker came from](#a--where-docker-came-from)
-
-</details>
-
-<details>
-<summary><a href="#04--docker-image">04 · Docker image</a></summary>
-
-* [a · Definition](#a--definition)
-* [b · Docker images vs. containers](#b--docker-images-vs-containers)
-* [c · Image layers](#c--image-layers)
+* a · Containers are much older than Docker
+* b · Namespaces, what it sees
+* c · Where namespaces actually live
+* d · cgroups, what it uses
+* e · Conclusion
 
 </details>
 
 <details>
-<summary><a href="#05--docker-architecture">05 · Docker architecture (client ↔ daemon)</a></summary>
+<summary>03 · What Docker is</summary>
 
-* [a · The CLI is just an HTTP client](#a--the-cli-is-just-an-http-client)
-* [b · dockerd, containerd, shim, runc](#b--dockerd-containerd-shim-runc)
-* [c · DEEPDIVE](#c--deepdive)
+* a · Where Docker came from
 
 </details>
 
 <details>
-<summary><a href="#06--dockerfile">06 · Dockerfile</a></summary>
+<summary>04 · Docker image</summary>
 
-* [a · Instructions and layers](#a--instructions-and-layers)
-* [b · FROM](#b--from)
-* [c · RUN](#c--run)
-* [d · COPY and the build context](#d--copy-and-the-build-context)
-* [e · CMD, ENTRYPOINT and PID 1](#e--cmd-entrypoint-and-pid-1)
-* [f · Users and privileges inside a container](#f--users-and-privileges-inside-a-container)
-
-</details>
-
-<div>&emsp;<a href="#07--docker-compose">07 · Docker Compose</a></div>
-
-<details>
-<summary><a href="#08--volumes">08 · Volumes</a></summary>
-
-* [a · Why containers need them](#a--why-containers-need-them)
-* [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
-* [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
-
-</details>
-
-<div>&emsp;<a href="#09--docker-networking">09 · Docker networking</a></div>
-
-<details>
-<summary><a href="#10--mariadb">10 · MariaDB</a></summary>
-
-* [a · What MariaDB is](#a--what-mariadb-is)
-* [b · MariaDB, the container](#b--mariadb-the-container)
+* a · Definition
+* b · Docker images vs. containers
+* c · Image layers
 
 </details>
 
 <details>
-<summary><a href="#11--wordpress">11 · WordPress</a></summary>
+<summary>05 · Docker architecture (client ↔ daemon)</summary>
 
-* [a · What WordPress is](#a--what-wordpress-is)
-* [b · The WordPress container](#b--the-wordpress-container)
+* a · The CLI is just an HTTP client
+* b · dockerd, containerd, shim, runc
+* c · DEEPDIVE
 
 </details>
 
 <details>
-<summary><a href="#12--nginx">12 · nginx</a></summary>
+<summary>06 · Dockerfile</summary>
 
-* [a · What nginx is](#a--what-nginx-is)
-* [b · The configuration files](#b--the-configuration-files)
-* [c · TLS and the certificate](#c--tls-and-the-certificate)
-* [d · The nginx container](#d--the-nginx-container)
+* a · Instructions and layers
+* b · FROM
+* c · RUN
+* d · COPY and the build context
+* e · CMD, ENTRYPOINT and PID 1
+* f · Users and privileges inside a container
 
 </details>
 
-<div>&emsp;<a href="#13--the-makefile">13 · The Makefile</a></div>
+<div>&emsp;07 · Docker Compose</div>
 
 <details>
-<summary><a href="#14--bonus">14 · Bonus</a></summary>
+<summary>08 · Volumes</summary>
 
-* [a · A static website](#a--a-static-website)
-* [b · Adminer](#b--adminer)
-* [c · redis cache](#c--redis-cache)
-* [d · The service of my choice](#d--the-service-of-my-choice)
+* a · Why containers need them
+* b · Named volumes and bind mounts
+* c · driver_opts, satisfying both rules
+
+</details>
+
+<div>&emsp;09 · Docker networking</div>
+
+<details>
+<summary>10 · MariaDB</summary>
+
+* a · What MariaDB is
+* b · MariaDB, the container
+
+</details>
+
+<details>
+<summary>11 · WordPress</summary>
+
+* a · What WordPress is
+* b · The WordPress container
+
+</details>
+
+<details>
+<summary>12 · nginx</summary>
+
+* a · What nginx is
+* b · The configuration files
+* c · TLS and the certificate
+* d · The nginx container
+
+</details>
+
+<div>&emsp;13 · The Makefile</div>
+
+<details>
+<summary>14 · Bonus</summary>
+
+* a · A static website
+* b · Adminer
+* c · redis cache
+* d · The service of my choice
 
 </details>
 
