@@ -369,9 +369,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 <summary><h1>03 · What Docker is</h1></summary>
 
 
-At this point, **Linux** already gives us everything required to isolate a process. What is missing is a convenient way to use it.
-
-LXC automated much of the low-level setup, but an application's environment still had to be assembled again on every machine. The container worked; the **workflow around it** was the missing part.
+At this point, **Linux** already gives us everything required to isolate a process. What is missing is a convenient, repeatable way to build, share, and run that isolated environment.
 
 That is where Docker fits:
 
