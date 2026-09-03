@@ -488,12 +488,12 @@ Docker defines a container as an **isolated process**: *"Containers are isolated
 
 **An image is a stack of layers, and each layer is a set of filesystem changes:** additions, deletions, or modifications.
 
-Each build instruction produces one:
-
-```dockerfile
-FROM debian:bookworm     → layer 1: the whole base filesystem
-RUN apt install nginx    → layer 2: only the files apt added
-COPY nginx.conf /etc/    → layer 3: one file
+```text
+layer 3   application configuration
+layer 2   installed application and dependencies
+layer 1   base userspace filesystem
+────────────────────────────────────────
+image     one combined filesystem
 ```
 
 **On disk, every layer is extracted into its own directory.** They only become a filesystem when a container starts: a **union filesystem** stacks them into one unified view, and adds one more directory that belongs to the container itself.
@@ -512,8 +512,9 @@ the process sees:  one merged /
 **Why layers matter:**
 
 - **Reuse.** You extend someone else's image by reusing their base layers and adding only your own data. Ten images built `FROM debian:bookworm` store that base **once**.
-- **Cache.** On rebuild, unchanged layers are reused, which is why the order of your instructions changes build time.
 - **Immutable.** Image layers are never touched. Every change a container makes lands in its own writable directory, and that directory dies with the container.
+
+**Docker records filesystem changes as layers while building an image.** § 06 a explains how Dockerfile instructions produce those changes and how the resulting layers are cached.
 
 
 </details>
@@ -829,6 +830,8 @@ docker build -t my-nginx .
 | `FROM` `RUN` `COPY` `ADD` | `CMD` `ENTRYPOINT` `ENV` `WORKDIR` `EXPOSE` ... |
 
 So the example above is **4 instructions but 3 layers**. This is where the layers in § 04 c come from: **the Dockerfile is what produces them.**
+
+**Those layers also form the build cache.** When an instruction and its inputs have not changed, Docker can reuse the existing result instead of running that step again. Once a layer changes, the layers that depend on it must be rebuilt, so stable instructions generally belong before frequently edited files.
 
 
 </details>
