@@ -20,12 +20,7 @@
 
 </details>
 
-<details>
-<summary>03 · What Docker is</summary>
-
-* a · Where Docker came from
-
-</details>
+<div>&emsp;03 · What Docker is</div>
 
 <details>
 <summary>04 · Docker image</summary>
@@ -407,9 +402,9 @@ It turns the low-level pieces of containerization into a workflow a developer ca
 > **Linux provides the container mechanism. Docker provides the tools and workflow around it.**
 
 
-<a id="a--where-docker-came-from"></a>
+<a id="deepdive--where-docker-came-from"></a>
 <details>
-<summary><h2>a · Where Docker came from</h2></summary>
+<summary><h2>DEEPDIVE · Where Docker came from</h2></summary>
 
 
 **LXC could already run a container**, but you still had to assemble its filesystem by hand, choose the namespaces, wire the network, then repeat all of it on every machine. There was no way to hand someone a finished environment.
