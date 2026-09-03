@@ -782,6 +782,9 @@ And underneath all of them:
 
 > **A Dockerfile is a recipe for building an image.** A plain-text file of instructions that the builder executes in order. Docker uses **BuildKit** by default.
 
+<p align="center"><img src="assets/docker_file_to_image_to_container.png" width="700"></p>
+<p align="center"><i>a Dockerfile is built into an image · an image is run as a container</i></p>
+
 ```dockerfile
 FROM debian:bookworm
 RUN apt-get update && apt-get install -y nginx
