@@ -1,57 +1,110 @@
 <h1 align="center">Inception · Notes</h1>
 
+## Index
+
 <details>
-<summary><h2>Index</h2></summary>
+<summary><a href="#01--why-containers-were-invented">01 · Why containers were invented</a></summary>
 
+* [a · Container vs Virtual Machine](#a--container-vs-virtual-machine)
 
-* [01 · Why containers were invented](#01--why-containers-were-invented)
-    * [a · Container vs Virtual Machine](#a--container-vs-virtual-machine)
-* [02 · What is a container?](#02--what-is-a-container)
-    * [a · Containers are much older than Docker](#a--containers-are-much-older-than-docker)
-    * [b · Namespaces, what it sees](#b--namespaces-what-it-sees)
-    * [c · Where namespaces actually live](#c--where-namespaces-actually-live)
-    * [d · cgroups, what it uses](#d--cgroups-what-it-uses)
-    * [e · Conclusion](#e--conclusion)
-* [03 · What Docker is](#03--what-docker-is)
-    * [a · Where Docker came from](#a--where-docker-came-from)
-* [04 · Docker image](#04--docker-image)
-    * [a · Definition](#a--definition)
-    * [b · Docker images vs. containers](#b--docker-images-vs-containers)
-    * [c · Image layers](#c--image-layers)
-* [05 · Docker architecture (client ↔ daemon)](#05--docker-architecture)
-    * [a · The CLI is just an HTTP client](#a--the-cli-is-just-an-http-client)
-    * [b · dockerd, containerd, shim, runc](#b--dockerd-containerd-shim-runc)
-    * [c · DEEPDIVE](#c--deepdive)
-* [06 · Dockerfile](#06--dockerfile)
-    * [a · Instructions and layers](#a--instructions-and-layers)
-    * [b · FROM](#b--from)
-    * [c · RUN](#c--run)
-    * [d · COPY and the build context](#d--copy-and-the-build-context)
-    * [e · CMD, ENTRYPOINT and PID 1](#e--cmd-entrypoint-and-pid-1)
-    * [f · Users and privileges inside a container](#f--users-and-privileges-inside-a-container)
+</details>
+
+<details>
+<summary><a href="#02--what-is-a-container">02 · What is a container?</a></summary>
+
+* [a · Containers are much older than Docker](#a--containers-are-much-older-than-docker)
+* [b · Namespaces, what it sees](#b--namespaces-what-it-sees)
+* [c · Where namespaces actually live](#c--where-namespaces-actually-live)
+* [d · cgroups, what it uses](#d--cgroups-what-it-uses)
+* [e · Conclusion](#e--conclusion)
+
+</details>
+
+<details>
+<summary><a href="#03--what-docker-is">03 · What Docker is</a></summary>
+
+* [a · Where Docker came from](#a--where-docker-came-from)
+
+</details>
+
+<details>
+<summary><a href="#04--docker-image">04 · Docker image</a></summary>
+
+* [a · Definition](#a--definition)
+* [b · Docker images vs. containers](#b--docker-images-vs-containers)
+* [c · Image layers](#c--image-layers)
+
+</details>
+
+<details>
+<summary><a href="#05--docker-architecture">05 · Docker architecture (client ↔ daemon)</a></summary>
+
+* [a · The CLI is just an HTTP client](#a--the-cli-is-just-an-http-client)
+* [b · dockerd, containerd, shim, runc](#b--dockerd-containerd-shim-runc)
+* [c · DEEPDIVE](#c--deepdive)
+
+</details>
+
+<details>
+<summary><a href="#06--dockerfile">06 · Dockerfile</a></summary>
+
+* [a · Instructions and layers](#a--instructions-and-layers)
+* [b · FROM](#b--from)
+* [c · RUN](#c--run)
+* [d · COPY and the build context](#d--copy-and-the-build-context)
+* [e · CMD, ENTRYPOINT and PID 1](#e--cmd-entrypoint-and-pid-1)
+* [f · Users and privileges inside a container](#f--users-and-privileges-inside-a-container)
+
+</details>
+
 * [07 · Docker Compose](#07--docker-compose)
-* [08 · Volumes](#08--volumes)
-    * [a · Why containers need them](#a--why-containers-need-them)
-    * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
-    * [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
+
+<details>
+<summary><a href="#08--volumes">08 · Volumes</a></summary>
+
+* [a · Why containers need them](#a--why-containers-need-them)
+* [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
+* [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
+
+</details>
+
 * [09 · Docker networking](#09--docker-networking)
-* [10 · MariaDB](#10--mariadb)
-    * [a · What MariaDB is](#a--what-mariadb-is)
-    * [b · MariaDB, the container](#b--mariadb-the-container)
-* [11 · WordPress](#11--wordpress)
-    * [a · What WordPress is](#a--what-wordpress-is)
-    * [b · The WordPress container](#b--the-wordpress-container)
-* [12 · nginx](#12--nginx)
-    * [a · What nginx is](#a--what-nginx-is)
-    * [b · The configuration files](#b--the-configuration-files)
-    * [c · TLS and the certificate](#c--tls-and-the-certificate)
-    * [d · The nginx container](#d--the-nginx-container)
+
+<details>
+<summary><a href="#10--mariadb">10 · MariaDB</a></summary>
+
+* [a · What MariaDB is](#a--what-mariadb-is)
+* [b · MariaDB, the container](#b--mariadb-the-container)
+
+</details>
+
+<details>
+<summary><a href="#11--wordpress">11 · WordPress</a></summary>
+
+* [a · What WordPress is](#a--what-wordpress-is)
+* [b · The WordPress container](#b--the-wordpress-container)
+
+</details>
+
+<details>
+<summary><a href="#12--nginx">12 · nginx</a></summary>
+
+* [a · What nginx is](#a--what-nginx-is)
+* [b · The configuration files](#b--the-configuration-files)
+* [c · TLS and the certificate](#c--tls-and-the-certificate)
+* [d · The nginx container](#d--the-nginx-container)
+
+</details>
+
 * [13 · The Makefile](#13--the-makefile)
-* [14 · Bonus](#14--bonus)
-    * [a · A static website](#a--a-static-website)
-    * [b · Adminer](#b--adminer)
-    * [c · redis cache](#c--redis-cache)
-    * [d · The service of my choice](#d--the-service-of-my-choice)
+
+<details>
+<summary><a href="#14--bonus">14 · Bonus</a></summary>
+
+* [a · A static website](#a--a-static-website)
+* [b · Adminer](#b--adminer)
+* [c · redis cache](#c--redis-cache)
+* [d · The service of my choice](#d--the-service-of-my-choice)
 
 </details>
 
