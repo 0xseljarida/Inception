@@ -10,7 +10,7 @@
     * [c · Where namespaces actually live](#c--where-namespaces-actually-live)
     * [d · cgroups, what it uses](#d--cgroups-what-it-uses)
     * [e · Conclusion](#e--conclusion)
-* [03 · Docker](#03--docker)
+* [03 · What Docker is](#03--what-docker-is)
     * [a · Where Docker came from](#a--where-docker-came-from)
 * [04 · Docker image](#04--docker-image)
     * [a · Definition](#a--definition)
@@ -28,22 +28,22 @@
     * [e · CMD, ENTRYPOINT and PID 1](#e--cmd-entrypoint-and-pid-1)
     * [f · Users and privileges inside a container](#f--users-and-privileges-inside-a-container)
 * [07 · Docker Compose](#07--docker-compose)
-* [08 · MariaDB](#08--mariadb)
+* [08 · Volumes](#08--volumes)
+    * [a · Why containers need them](#a--why-containers-need-them)
+    * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
+    * [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
+* [09 · Docker networking](#09--docker-networking)
+* [10 · MariaDB](#10--mariadb)
     * [a · What MariaDB is](#a--what-mariadb-is)
     * [b · MariaDB, the container](#b--mariadb-the-container)
-* [09 · WordPress](#09--wordpress)
+* [11 · WordPress](#11--wordpress)
     * [a · What WordPress is](#a--what-wordpress-is)
     * [b · The WordPress container](#b--the-wordpress-container)
-* [10 · nginx](#10--nginx)
+* [12 · nginx](#12--nginx)
     * [a · What nginx is](#a--what-nginx-is)
     * [b · The configuration files](#b--the-configuration-files)
     * [c · TLS and the certificate](#c--tls-and-the-certificate)
     * [d · The nginx container](#d--the-nginx-container)
-* [11 · Volumes](#11--volumes)
-    * [a · Why containers need them](#a--why-containers-need-them)
-    * [b · Named volumes and bind mounts](#b--named-volumes-and-bind-mounts)
-    * [c · driver_opts, satisfying both rules](#c--driver_opts-satisfying-both-rules)
-* [12 · Docker networking](#12--docker-networking)
 * [13 · The Makefile](#13--the-makefile)
 * [14 · Bonus](#14--bonus)
     * [a · A static website](#a--a-static-website)
@@ -307,9 +307,9 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 </details>
 
-<a id="03--docker"></a>
+<a id="03--what-docker-is"></a>
 <details>
-<summary><h1>03 · Docker</h1></summary>
+<summary><h1>03 · What Docker is</h1></summary>
 
 
 At this point, **Linux** already gives us everything required to isolate a process. What is missing is a convenient way to use it.
@@ -1338,9 +1338,206 @@ docker compose    V2 onward, Go, a plugin of the docker CLI
 
 </details>
 
-<a id="08--mariadb"></a>
+<a id="08--volumes"></a>
 <details>
-<summary><h1>08 · MariaDB</h1></summary>
+<summary><h1>08 · Volumes</h1></summary>
+
+
+<a id="a--why-containers-need-them"></a>
+<details>
+<summary><h2>a · Why containers need them</h2></summary>
+
+
+> **A volume is a directory on the host that Docker mounts into a container, so the data written there survives the container.**
+
+**A container's filesystem dies with the container.** Remove the mariadb container and every table goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 c explains why. The writable layer belongs to the container, so it is destroyed with it.
+
+**Databases and uploaded media are the exception.** They are the one thing that must outlive the process that wrote them.
+
+**A volume solves that by pointing part of the container's filesystem somewhere else.** Writes to that path go through to the host disk instead of into the writable layer:
+
+```
+container                        host
+/var/lib/mysql   ───────────────► a real directory on the disk
+                                  survives docker rm, survives a rebuild
+```
+
+**Nothing inside the container can tell the difference.** `mariadbd` opens `/var/lib/mysql` exactly as it would on a normal machine. The redirection happens in the mount namespace, § 02 b, before the process ever sees the path.
+
+**This project needs two of them:**
+
+```
+mariadb     /var/lib/mysql     the tables
+wordpress   /var/www/html      the PHP files and wp-content/uploads
+```
+
+</details>
+
+<a id="b--named-volumes-and-bind-mounts"></a>
+<details>
+<summary><h2>b · Named volumes and bind mounts</h2></summary>
+
+
+**There are two ways to say "mount something from the host", and Docker treats them differently:**
+
+```yaml
+volumes:
+  - /home/login/data/mariadb:/var/lib/mysql   ← bind mount
+  - mariadb_data:/var/lib/mysql                  ← named volume
+```
+
+| | Named volume | Bind mount |
+|:--|:--|:--|
+| **who chooses the host path** | Docker | you |
+| **default location** | `/var/lib/docker/volumes/<name>/_data` | wherever you point it |
+| **listed by `docker volume ls`** | yes | no |
+| **exists as an object** | yes, with a name and a driver | no, it is only a path |
+| **copy-up on first mount** | yes | no |
+
+**Measured on this machine:**
+
+```
+$ docker volume create probe_tmp && docker volume inspect probe_tmp
+/var/lib/docker/volumes/probe_tmp/_data | driver=local
+```
+
+**Copy-up is the behaviour that matters for wordpress.** Mounting an *empty* named volume over a directory that already has files in the image copies those files into the volume. A bind mount never does this, it simply hides whatever was underneath. That is why `wp core download` can run at build time and the files still reach the volume, which § 09 b covers.
+
+**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/login/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and § 11 c is how both are satisfied.
+
+</details>
+
+<a id="c--driver_opts-satisfying-both-rules"></a>
+<details>
+<summary><h2>c · <code>driver_opts</code>, satisfying both rules</h2></summary>
+
+
+**The subject states both requirements in the same list:**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> • A volume that contains your WordPress database.
+>
+> • A second volume that contains your WordPress website files.
+>
+> • **You must use Docker named volumes** for these two persistent storages. Bind mounts are not allowed for these volumes.
+>
+> • **Both named volumes must store their data inside `/home/login/data`** on the host machine.
+>
+> <sub><i>the subject, and later: "Your volumes will be available in the /home/login/data folder of the host machine using Docker."</i></sub>
+
+</details>
+
+**Named, but not where Docker names them.** `driver_opts` passes options to the volume driver, and the `local` driver accepts the three that redirect its storage:
+
+```yaml
+volumes:
+  mariadb_volume:
+    driver_opts:
+      type: none                              no filesystem to create, pass through
+      o: bind                                 mount it as a bind
+      device: /home/login/data/mariadb     the host directory to use
+```
+
+**It is still a named volume.** `docker volume ls` lists it, `docker volume rm` removes it, and copy-up still applies. Only the location changed.
+
+**The directory must already exist.** `type: none` creates nothing. Measured:
+
+```
+failed to mount local volume:
+  mount /home/login/data/does-not-exist:/var/lib/docker/volumes/..._data
+  no such file or directory
+```
+
+The container never starts, and the directory is still missing afterwards. So the Makefile has to run `mkdir -p` before `docker compose up`.
+
+**One device per volume.** Two volumes pointing at the same `device` is one directory with two names, and mariadb's tables would land beside WordPress's PHP files, in a directory nginx serves over HTTP.
+
+</details>
+
+</details>
+
+<a id="09--docker-networking"></a>
+<details>
+<summary><h1>09 · Docker networking</h1></summary>
+
+> **Docker networking determines how containers communicate. Docker can create virtual networks that act like virtual switches. Containers attached to the same network can communicate with each other.**
+
+<details>
+<summary><b>Proof from the subject</b></summary>
+
+<br>
+
+> You have to set up a docker-network that establishes the connection between your containers.
+>
+> Of course, using network: host or --link or links: is forbidden.
+>
+> <sub><i>the subject</i></sub>
+
+</details>
+
+<br>
+
+```text
+             Docker bridge network
+              ┌───────────────┐
+              │ Virtual switch│
+              └───┬────┬────┬─┘
+                  │    │    │
+               nginx  WP  MariaDB
+```
+
+<br>
+
+**The three modes:**
+
+```text
+BRIDGE
+Container ── Docker virtual network ── Other containers
+                         │
+                         └── Host/NAT ── Internet
+
+
+HOST
+Container ───────────── Host network
+        (no separate network isolation)
+
+
+NONE
+Container
+   │
+   └── No network
+```
+
+<br>
+
+**In this project:**
+
+```text
+             inception network
+        ┌─────────────────────────┐
+        │                         │
+      nginx ─── wordpress ─── mariadb
+        │            │
+        │            └── redis
+        │
+        └── adminer
+        └── netdata
+        └── resume
+```
+
+> **In my project, I use a custom bridge network called `inception`, which allows my containers to communicate with each other by service name.**
+
+</details>
+
+---
+
+<a id="10--mariadb"></a>
+<details>
+<summary><h1>10 · MariaDB</h1></summary>
 
 
 <p align="center"><img src="assets/mariadb_image.png" width="400"></p>
@@ -1665,9 +1862,9 @@ PID 1, runs the SQL, then serves    PID 1, serves
 
 </details>
 
-<a id="09--wordpress"></a>
+<a id="11--wordpress"></a>
 <details>
-<summary><h1>09 · WordPress</h1></summary>
+<summary><h1>11 · WordPress</h1></summary>
 
 
 <p align="center"><img src="assets/wordpress_images.png" width="300"></p>
@@ -2179,9 +2376,9 @@ chown -R www-data:www-data /var/www/html
 
 </details>
 
-<a id="10--nginx"></a>
+<a id="12--nginx"></a>
 <details>
-<summary><h1>10 · nginx</h1></summary>
+<summary><h1>12 · nginx</h1></summary>
 
 
 <a id="a--what-nginx-is"></a>
@@ -2649,203 +2846,6 @@ nginx container
 
 
 </details>
-
-<a id="11--volumes"></a>
-<details>
-<summary><h1>11 · Volumes</h1></summary>
-
-
-<a id="a--why-containers-need-them"></a>
-<details>
-<summary><h2>a · Why containers need them</h2></summary>
-
-
-> **A volume is a directory on the host that Docker mounts into a container, so the data written there survives the container.**
-
-**A container's filesystem dies with the container.** Remove the mariadb container and every table goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 c explains why. The writable layer belongs to the container, so it is destroyed with it.
-
-**Databases and uploaded media are the exception.** They are the one thing that must outlive the process that wrote them.
-
-**A volume solves that by pointing part of the container's filesystem somewhere else.** Writes to that path go through to the host disk instead of into the writable layer:
-
-```
-container                        host
-/var/lib/mysql   ───────────────► a real directory on the disk
-                                  survives docker rm, survives a rebuild
-```
-
-**Nothing inside the container can tell the difference.** `mariadbd` opens `/var/lib/mysql` exactly as it would on a normal machine. The redirection happens in the mount namespace, § 02 b, before the process ever sees the path.
-
-**This project needs two of them:**
-
-```
-mariadb     /var/lib/mysql     the tables
-wordpress   /var/www/html      the PHP files and wp-content/uploads
-```
-
-</details>
-
-<a id="b--named-volumes-and-bind-mounts"></a>
-<details>
-<summary><h2>b · Named volumes and bind mounts</h2></summary>
-
-
-**There are two ways to say "mount something from the host", and Docker treats them differently:**
-
-```yaml
-volumes:
-  - /home/login/data/mariadb:/var/lib/mysql   ← bind mount
-  - mariadb_data:/var/lib/mysql                  ← named volume
-```
-
-| | Named volume | Bind mount |
-|:--|:--|:--|
-| **who chooses the host path** | Docker | you |
-| **default location** | `/var/lib/docker/volumes/<name>/_data` | wherever you point it |
-| **listed by `docker volume ls`** | yes | no |
-| **exists as an object** | yes, with a name and a driver | no, it is only a path |
-| **copy-up on first mount** | yes | no |
-
-**Measured on this machine:**
-
-```
-$ docker volume create probe_tmp && docker volume inspect probe_tmp
-/var/lib/docker/volumes/probe_tmp/_data | driver=local
-```
-
-**Copy-up is the behaviour that matters for wordpress.** Mounting an *empty* named volume over a directory that already has files in the image copies those files into the volume. A bind mount never does this, it simply hides whatever was underneath. That is why `wp core download` can run at build time and the files still reach the volume, which § 09 b covers.
-
-**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/login/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and § 11 c is how both are satisfied.
-
-</details>
-
-<a id="c--driver_opts-satisfying-both-rules"></a>
-<details>
-<summary><h2>c · <code>driver_opts</code>, satisfying both rules</h2></summary>
-
-
-**The subject states both requirements in the same list:**
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> • A volume that contains your WordPress database.
->
-> • A second volume that contains your WordPress website files.
->
-> • **You must use Docker named volumes** for these two persistent storages. Bind mounts are not allowed for these volumes.
->
-> • **Both named volumes must store their data inside `/home/login/data`** on the host machine.
->
-> <sub><i>the subject, and later: "Your volumes will be available in the /home/login/data folder of the host machine using Docker."</i></sub>
-
-</details>
-
-**Named, but not where Docker names them.** `driver_opts` passes options to the volume driver, and the `local` driver accepts the three that redirect its storage:
-
-```yaml
-volumes:
-  mariadb_volume:
-    driver_opts:
-      type: none                              no filesystem to create, pass through
-      o: bind                                 mount it as a bind
-      device: /home/login/data/mariadb     the host directory to use
-```
-
-**It is still a named volume.** `docker volume ls` lists it, `docker volume rm` removes it, and copy-up still applies. Only the location changed.
-
-**The directory must already exist.** `type: none` creates nothing. Measured:
-
-```
-failed to mount local volume:
-  mount /home/login/data/does-not-exist:/var/lib/docker/volumes/..._data
-  no such file or directory
-```
-
-The container never starts, and the directory is still missing afterwards. So the Makefile has to run `mkdir -p` before `docker compose up`.
-
-**One device per volume.** Two volumes pointing at the same `device` is one directory with two names, and mariadb's tables would land beside WordPress's PHP files, in a directory nginx serves over HTTP.
-
-</details>
-
-</details>
-
-<a id="12--docker-networking"></a>
-<details>
-<summary><h1>12 · Docker networking</h1></summary>
-
-> **Docker networking determines how containers communicate. Docker can create virtual networks that act like virtual switches. Containers attached to the same network can communicate with each other.**
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> You have to set up a docker-network that establishes the connection between your containers.
->
-> Of course, using network: host or --link or links: is forbidden.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
-<br>
-
-```text
-             Docker bridge network
-              ┌───────────────┐
-              │ Virtual switch│
-              └───┬────┬────┬─┘
-                  │    │    │
-               nginx  WP  MariaDB
-```
-
-<br>
-
-**The three modes:**
-
-```text
-BRIDGE
-Container ── Docker virtual network ── Other containers
-                         │
-                         └── Host/NAT ── Internet
-
-
-HOST
-Container ───────────── Host network
-        (no separate network isolation)
-
-
-NONE
-Container
-   │
-   └── No network
-```
-
-<br>
-
-**In this project:**
-
-```text
-             inception network
-        ┌─────────────────────────┐
-        │                         │
-      nginx ─── wordpress ─── mariadb
-        │            │
-        │            └── redis
-        │
-        └── adminer
-        └── netdata
-        └── resume
-```
-
-> **In my project, I use a custom bridge network called `inception`, which allows my containers to communicate with each other by service name.**
-
-</details>
-
----
 
 <a id="13--the-makefile"></a>
 <details>
