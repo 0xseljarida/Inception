@@ -57,7 +57,7 @@
 
 </details>
 
-* [07 · Docker Compose](#07--docker-compose)
+<div>&emsp;<a href="#07--docker-compose">07 · Docker Compose</a></div>
 
 <details>
 <summary><a href="#08--volumes">08 · Volumes</a></summary>
@@ -68,7 +68,7 @@
 
 </details>
 
-* [09 · Docker networking](#09--docker-networking)
+<div>&emsp;<a href="#09--docker-networking">09 · Docker networking</a></div>
 
 <details>
 <summary><a href="#10--mariadb">10 · MariaDB</a></summary>
@@ -96,7 +96,7 @@
 
 </details>
 
-* [13 · The Makefile](#13--the-makefile)
+<div>&emsp;<a href="#13--the-makefile">13 · The Makefile</a></div>
 
 <details>
 <summary><a href="#14--bonus">14 · Bonus</a></summary>
