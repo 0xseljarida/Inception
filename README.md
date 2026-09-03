@@ -170,7 +170,7 @@ Three options existed:
 
 
 <p align="center"><img src="assets/image_linux_peng.jpeg" width="500"></p>
-<p align="center"><i>namespaces and cgroups are Linux kernel features, not Docker features</i></p>
+<p align="center"><i>the container is a Linux mechanism · Docker only makes it easy to use</i></p>
 
 > **A container is a Linux process running in an isolated environment, where the kernel restricts and controls what the process can see and access.**
 
