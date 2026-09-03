@@ -22,6 +22,7 @@
 
 <div>&emsp;03 · What Docker is</div>
 <br>
+<br>
 
 <details>
 <summary>04 · Docker image</summary>
@@ -54,6 +55,7 @@
 </details>
 
 <div>&emsp;07 · Docker Compose</div>
+<br>
 
 <details>
 <summary>08 · Volumes</summary>
@@ -65,6 +67,7 @@
 </details>
 
 <div>&emsp;09 · Docker networking</div>
+<br>
 
 <details>
 <summary>10 · MariaDB</summary>
@@ -93,6 +96,7 @@
 </details>
 
 <div>&emsp;13 · The Makefile</div>
+<br>
 
 <details>
 <summary>14 · Bonus</summary>
