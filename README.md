@@ -22,7 +22,6 @@
 
 <div>&emsp;03 · What Docker is</div>
 <br>
-<br>
 
 <details>
 <summary>04 · Docker image</summary>
