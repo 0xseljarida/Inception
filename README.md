@@ -322,6 +322,9 @@ That is where Docker fits:
 
 **In other words,** Docker manages the images, networks, volumes, ports, and lifecycle needed to run containers. **Linux still creates the isolation** through namespaces and cgroups.
 
+<p align="center"><img src="assets/What_does_docker_do.png" width="600"></p>
+<p align="center"><i>Docker manages the objects needed to build and run containerized applications</i></p>
+
 ```text
                     Docker workflow
 
@@ -466,6 +469,9 @@ the process sees:  one merged /
 > **Docker is client and server.** The `docker` command does almost nothing by itself.
 
 **The daemon does the work.** In Docker's own words: *"The Docker client talks to the Docker daemon, which does the heavy lifting of building, running, and distributing your Docker containers."* `dockerd` listens for API requests and manages images, containers, networks and volumes.
+
+<p align="center"><img src="assets/Docker-engine-components-flow.png" width="500"></p>
+<p align="center"><i>the Docker client reaches the daemon through the REST API</i></p>
 
 
 <a id="a--the-cli-is-just-an-http-client"></a>
