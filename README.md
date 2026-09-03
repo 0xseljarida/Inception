@@ -37,7 +37,6 @@
 
 * a · The CLI is a Docker API client
 * b · dockerd, containerd, shim, runc
-* c · DEEPDIVE
 
 </details>
 
@@ -606,29 +605,17 @@ docker CLI  ──>  dockerd  ──>  containerd  ──>  containerd-shim  ─
 |:--|:--|
 | **dockerd** | the Docker API, images, builds, networks, volumes, the CLI-facing features |
 | **containerd** | container lifecycle: pull, unpack, start, stop, supervise |
-| **containerd-shim** | one per container. Stays alive, holds its stdio, reports its exit code |
+| **containerd-shim** | bridges containerd to the runtime, keeps container I/O and exit status available, and may supervise one or more containers |
 | **runc** | actually creates the container: `clone()` with the namespace flags, writes the cgroup files, `exec`s your process, then **exits immediately** |
 
-**Only `runc` touches the kernel**, and it is gone a millisecond later. That is why you never see it in `ps`.
+**`runc` performs the low-level container setup**: namespaces, cgroups, capabilities, mounts, and process creation. Once the container process is running, `runc` exits; the shim remains.
 
-**A running container is a child of the shim, not of the daemon:**
+<br>
 
-```
-sleep (24654)
-  └─ containerd-shim (24630)
-       └─ systemd (1)
-```
-
-**That is why `systemctl restart docker` doesn't kill your containers.** They were never the daemon's children. The daemon can die and come back, and the container never notices.
-
-**And `containerd` is not Docker-only.** It is a separate CNCF project. Kubernetes talks to it directly, with no Docker involved.
-
-
-</details>
-
-<a id="c--deepdive"></a>
 <details>
-<summary><h2>c · DEEPDIVE</h2></summary>
+<summary><b>DEEPDIVE · How a container is actually started</b></summary>
+
+<br>
 
 
 - **`dockerd`**: the **Docker daemon** that manages Docker resources and translates Docker API requests into container operations.
@@ -659,6 +646,20 @@ containerd-shim-runc-v2
 your process
 ```
 
+**The shim separates the running process from the short-lived runtime.** A common standalone Docker process tree looks like this:
+
+```text
+systemd (PID 1)
+  └─ containerd-shim-runc-v2
+       └─ container process
+```
+
+Runtime v2 does not require a strict one-shim-per-container design; a shim implementation may manage one container or a related group.
+
+**This does not mean restarting Docker is harmless by default.** Docker normally shuts down running containers when the daemon terminates. Containers remain running across a daemon outage only when `live-restore` is enabled.
+
+**`containerd` is not Docker-only.** It is an independent CNCF project, and systems such as Kubernetes can use it through the Container Runtime Interface without `dockerd`.
+
 <br>
 
 ### 1. What `dockerd` actually does
@@ -688,7 +689,7 @@ POST /containers/create
 - which volumes and bind mounts?
 - which environment variables, which restart policy?
 
-**`dockerd` constructs the desired container configuration.** That is its whole job.
+**`dockerd` constructs the desired container configuration.** This translation from Docker-level features into a concrete runtime request is one of its core jobs.
 
 <br>
 
@@ -793,6 +794,8 @@ And underneath all of them:
                       ▲
                  docker CLI
 ```
+
+</details>
 
 </details>
 
