@@ -395,11 +395,13 @@ That is where Docker fits:
                                     what it sees         what it uses
 ```
 
+> **A Docker registry is a server that stores, versions, and distributes container images.** Think of it as GitHub for images: instead of hosting source code, it hosts packaged, ready-to-run application environments. **Docker Hub is the best-known public registry.**
+
 It turns the low-level pieces of containerization into a workflow a developer can use:
 
 1. **Describe** the application's environment in a `Dockerfile`.
 2. **Build** that environment into an image.
-3. **Share** the image through a registry (like Docker Hub, something like github for containers).
+3. **Share** the image through a registry such as Docker Hub.
 4. **Run** it as a container on any compatible host.
 
 > **Linux provides the container mechanism. Docker provides the tools and workflow around it.**
