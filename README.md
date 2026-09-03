@@ -1,6 +1,8 @@
 <h1 align="center">Inception · Notes</h1>
 
-## Index
+<details>
+<summary><h2>Index</h2></summary>
+
 
 * [01 · Why containers were invented](#01--why-containers-were-invented)
     * [a · Container vs Virtual Machine](#a--container-vs-virtual-machine)
@@ -50,6 +52,9 @@
     * [b · Adminer](#b--adminer)
     * [c · redis cache](#c--redis-cache)
     * [d · The service of my choice](#d--the-service-of-my-choice)
+
+</details>
+
 ---
 
 <a id="01--why-containers-were-invented"></a>
