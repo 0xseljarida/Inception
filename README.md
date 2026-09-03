@@ -35,7 +35,7 @@
 <details>
 <summary>05 · Docker architecture (client ↔ daemon)</summary>
 
-* a · The CLI is just an HTTP client
+* a · The CLI is a Docker API client
 * b · dockerd, containerd, shim, runc
 * c · DEEPDIVE
 
@@ -532,38 +532,61 @@ the process sees:  one merged /
 <p align="center"><i>the Docker client reaches the daemon through the REST API</i></p>
 
 
-<a id="a--the-cli-is-just-an-http-client"></a>
+<a id="a--the-cli-is-a-docker-api-client"></a>
 <details>
-<summary><h2>a · The CLI is just an HTTP client</h2></summary>
+<summary><h2>a · The CLI is a Docker API client</h2></summary>
 
 
-**They talk over a REST API**, on a UNIX socket or a network interface. Nothing more.
+**The Docker CLI is the command-line client for Docker Engine.** When you run a command such as `docker ps`, the CLI translates it into an API request, sends it to the Docker daemon, and formats the daemon's response.
 
+**The CLI does five client-side jobs:**
+
+- Parses commands and options.
+- Reads contexts and client configuration.
+- Negotiates an API version with the daemon.
+- Sends API requests.
+- Formats daemon responses for humans.
+
+```text
+docker ps ──► Docker Engine API ──► dockerd
+                                      │
+               formatted table  ◄── response
 ```
-docker CLI  ──HTTP──>  /var/run/docker.sock  ──>  dockerd
-```
 
-**Proof, without using `docker` at all:**
+**The daemon performs the actual Docker operations.** The CLI does not inspect containers or start their processes itself. For example, `docker ps` maps to the API endpoint `GET /containers/json`; `dockerd` obtains the container list and returns it for the CLI to display.
+
+**On Linux, the CLI normally reaches the daemon through `/var/run/docker.sock`.** A Docker context can instead point the same CLI at a remote engine over SSH or TCP secured with TLS.
+
+<br>
+
+<details>
+<summary><b>DEEPDIVE · Calling and securing the Docker API</b></summary>
+
+<br>
+
+**You can call the API without using the Docker CLI:**
 
 ```bash
 curl -s --unix-socket /var/run/docker.sock http://localhost/version
 ```
 
 ```json
-{"Version":"29.7.2","ApiVersion":"1.55","Os":"linux","Arch":"amd64", ...}
+{"Version":"...","ApiVersion":"...","Os":"linux","Arch":"amd64", ...}
 ```
 
-That's the same answer `docker version` prints, because that is all `docker version` does.
+The daemon returns the same server information that appears in `docker version`; the CLI requests it and formats the response for humans. For normal commands, the client and daemon negotiate the highest API version they both support so different Engine releases can still communicate.
 
-**One consequence worth knowing:**
+**The socket is therefore a security boundary, not an ordinary file:**
 
 ```
 srw-rw---- 1 root docker  /var/run/docker.sock
 ```
 
-Anyone in the `docker` group can send commands to a daemon running as **root**. Being in the docker group is effectively being root on the machine.
+With the usual rootful Docker daemon, anyone in the `docker` group can request privileged containers or mount the host filesystem. Access to that group therefore grants root-level privileges on the machine.
 
-**And they are separate services.** On this machine `dockerd` and `containerd` are both children of PID 1, started by systemd. Neither is the other's parent.
+**Rootless Docker changes this model** by running both the daemon and containers without root privileges. A remote daemon requires the same caution: use SSH or TLS rather than exposing an unauthenticated TCP socket.
+
+</details>
 
 
 </details>
