@@ -61,7 +61,7 @@
 
 * a · Why containers need them
 * b · Named volumes and bind mounts
-* c · driver_opts, satisfying both rules
+* c · Custom host paths with driver_opts
 
 </details>
 
@@ -254,7 +254,7 @@ Early versions of Docker used LXC as the container execution driver,[4] though L
 &nbsp;&nbsp;&nbsp;&nbsp;A process can be root inside while being nobody outside.
 
 🏷️ **`uts`** → its own hostname and domain name.
-&nbsp;&nbsp;&nbsp;&nbsp;The container calls itself `mariadb`; the host never changed name.
+&nbsp;&nbsp;&nbsp;&nbsp;The container calls itself `database`; the host never changed name.
 
 🔗 **`ipc`** → its own shared memory, message queues, semaphores.
 &nbsp;&nbsp;&nbsp;&nbsp;Nothing else can attach to its memory segments.
@@ -797,7 +797,7 @@ docker build -t my-nginx .
 ```
 
 
-**The instructions used in this project:**
+**Common Dockerfile instructions:**
 
 | Instruction | Role |
 |:--|:--|
@@ -842,35 +842,13 @@ So the example above is **4 instructions but 3 layers**. This is where the layer
 <summary><h2>b · FROM</h2></summary>
 
 
-**`FROM` names the base image and comes first.** For Inception:
+**`FROM` names the base image and comes first:**
 
 ```dockerfile
 FROM debian:bookworm
 ```
 
-**Never `debian:latest`.** The subject fixes both halves of this line:
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> For performance reasons, the containers must be built either from the penultimate stable version of Alpine or Debian. The choice is yours.
->
-> The latest tag is prohibited.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
-**Penultimate means one release behind current stable:**
-
-```
-Debian 13 · trixie     current stable
-Debian 12 · bookworm   penultimate stable   ← this one
-```
-
-**`latest` is a moving tag.** The image behind it changes over time, so a build that worked yesterday can break tomorrow. Pinning `bookworm` makes the intended release explicit and the build reproducible.
+**Avoid `debian:latest` when reproducibility matters.** `latest` is a moving tag: the image behind it changes over time, so a build that worked yesterday can behave differently tomorrow. Pinning a release such as `bookworm` makes the intended base explicit.
 
 
 </details>
@@ -924,7 +902,7 @@ Now those files never exist in a committed layer at all.
 
 **Fewer packages also means a smaller attack surface.** Every installed package is more code that can carry a CVE, which is why dropping unused recommends shows up in most Docker security checklists.
 
-**The flag can break things, deliberately.** Some packages genuinely need their recommends: fonts for a headless browser, locale or timezone data for some runtimes, `ca-certificates` for anything doing TLS, which is exactly the case hit later with `wp core download`. If a package that used to work fails after adding this flag, the missing recommend is the first suspect, and it gets added back explicitly, not fixed by dropping the flag.
+**The flag can break things, deliberately.** Some packages genuinely need their recommends: fonts for a headless browser, locale or timezone data for some runtimes, or `ca-certificates` for software that connects over TLS. If a package that used to work fails after adding this flag, the missing recommend is the first suspect, and it gets added back explicitly, not fixed by dropping the flag.
 
 **A global alternative exists** for turning this off on every future `apt-get install` instead of repeating the flag each time:
 
@@ -1001,33 +979,16 @@ php-fpm   -F
 mysqld    (already foreground)
 ```
 
-**The subject bans the workarounds by name, twice:**
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> A Docker container is not a virtual machine. Thus, it is not recommended to use any hacky patches based on 'tail -f' and similar methods when trying to run it. Read about how daemons work and whether it's a good idea to use them or not.
->
-> Your containers must not be started with a command running an infinite loop. Thus, this also applies to any command used as entrypoint, or used in entrypoint scripts. The following are a few prohibited hacky patches: tail -f, bash, sleep infinity, while true.
->
-> Read about PID 1 and the best practices for writing Dockerfiles.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
-**Each one is a fake process** holding the container open while the real service runs behind it, or not at all. Note the second quote reaches into entrypoint scripts, not just the `CMD`.
+**Do not keep a container alive with placeholders such as `tail -f`, `sleep infinity`, or `while true`.** Each one is a fake process holding the container open while the real service runs behind it, or not at all.
 
 <br>
 
 **Which leaves the question of what belongs in the script at all.** The rule is: anything that depends only on the image goes in the image, only what depends on runtime input goes in the entrypoint.
 
 ```text
-Dockerfile        mkdir /run/mysqld              a fixed path, known at build time
-entrypoint        create the database user       needs the secret, mounted at run time
-entrypoint        wp core install                needs the volume, mounted at run time
+Dockerfile        install dependencies           fixed, known at build time
+entrypoint        render runtime configuration   needs environment variables or secrets
+entrypoint        initialize persistent data     needs the volume mounted at run time
 ```
 
 **Everything put in the image is done once and cached.** Everything put in the entrypoint is redone at every container start, which is why anything placed there needs a guard against running twice.
@@ -1052,7 +1013,7 @@ entrypoint        wp core install                needs the volume, mounted at ru
 **This is why `RUN` never needs `sudo`:**
 
 ```dockerfile
-RUN apt-get update && apt-get install -y mariadb-server
+RUN apt-get update && apt-get install -y nginx
 ```
 
 Each `RUN` executes in a temporary container whose process is already root, so `apt-get` has every permission it needs. Writing `sudo` there fails outright, because `debian:bookworm` does not even ship the `sudo` package.
@@ -1077,35 +1038,13 @@ Each `RUN` executes in a temporary container whose process is already root, so `
 
 ### Dropping privileges on purpose
 
-**A daemon that starts as root does not have to stay root.** The usual pattern is to acquire whatever needs privilege, then call `setuid()` and `setgid()` to a dedicated unprivileged system account.
-
-**MariaDB refuses to skip this step:**
-
-```
-mariadbd: Please consult the Knowledge Base to find out how to run mysqld as root!
-```
-
-```bash
-mariadbd --user=mysql
-```
-
-**`--user=mysql` names a Linux system account, not a database account.** The `mariadb-server` package creates it at install time. The daemon drops to it, so every file it writes under `/var/lib/mysql` is owned by `mysql:mysql` rather than by root.
-
-**Two unrelated things share the word "user", and confusing them is the classic mistake:**
-
-```
-Linux accounts (/etc/passwd)     MariaDB accounts (mysql.global_priv)
-├── root      UID 0              ├── root@localhost
-└── mysql     owns the datadir   └── wpuser@%
-```
-
-The kernel knows nothing about the right-hand column. MariaDB knows nothing about the left-hand one.
+**A daemon that starts as root does not have to stay root.** The usual pattern is to acquire whatever needs privilege, then call `setuid()` and `setgid()` to a dedicated unprivileged system account. Files the daemon creates are then owned by that account rather than by root.
 
 <br>
 
 ### The practical consequence for volumes
 
-**UIDs are numbers, and they cross the boundary unchanged.** A file written by UID 999 inside the container appears on the host as owned by whatever host account happens to be UID 999. Since Inception's volumes resolve to real host directories under `/home/login/data/`, ownership there is decided by which account the container process dropped to, not by who ran `docker compose`.
+**UIDs are numbers, and they cross the boundary unchanged.** A file written by UID 999 inside the container appears on a mounted host directory as owned by whatever host account happens to be UID 999. Ownership is decided by the container process that writes the file, not by the user who ran Docker.
 
 </details>
 
@@ -1125,8 +1064,8 @@ The kernel knows nothing about the right-hand column. MariaDB knows nothing abou
 **That gap is what Compose fills:** *"it simplifies the control of your entire application stack, making it easy to manage services, networks, and volumes in a single YAML configuration file."* One file describes the whole system, and *"with a single command, you create and start all the services from your configuration file."*
 
 ```
-Dockerfile          how ONE image is built
-docker-compose.yml  how ALL the containers run together
+Dockerfile    how ONE image is built
+compose.yaml  how ALL the containers run together
 ```
 
 <br>
@@ -1136,29 +1075,29 @@ docker-compose.yml  how ALL the containers run together
 
 <br>
 
-**Without Compose, this project is three long commands that must be typed in the right order.** Just the mariadb one:
+**Without Compose, a multi-container application becomes a collection of long commands that must be repeated in the right order:**
 
 ```bash
-docker network create inception
-docker volume create mariadb_data
-docker run -d --name mariadb \
-    --network inception \
-    --env-file srcs/.env \
-    -v mariadb_data:/var/lib/mysql \
+docker network create app_net
+docker volume create app_data
+docker run -d --name database \
+    --network app_net \
+    --env-file .env \
+    -v app_data:/var/lib/database \
     --restart unless-stopped \
-    my-mariadb
+    example/database
 ```
 
-**Every flag is a fact that lives nowhere.** It exists in your shell history, and it has to be retyped identically on the next machine, in the right order, three times over.
+**Every flag is a fact that lives nowhere.** It exists in your shell history and has to be retyped identically on the next machine.
 
 ```yaml
 services:
-  mariadb:
-    build: ./requirements/mariadb
-    networks: [inception]
-    env_file: [../.env]
+  database:
+    image: example/database
+    networks: [app_net]
+    env_file: [.env]
     volumes:
-      - mariadb_data:/var/lib/mysql
+      - app_data:/var/lib/database
     restart: unless-stopped
 ```
 
@@ -1169,11 +1108,11 @@ services:
 <br>
 
 <details>
-<summary><b>The four top-level elements</b></summary>
+<summary><b>Four core top-level elements</b></summary>
 
 <br>
 
-**Everything in the file hangs off four keys**, and each one maps to a Docker object that already exists:
+**A typical Compose file is organized around four core keys**, each mapping to Docker objects or data used by services:
 
 ```yaml
 services:   the containers, one block each
@@ -1182,7 +1121,7 @@ volumes:    the named volumes that outlive them
 secrets:    files mounted read-only at /run/secrets/
 ```
 
-**`services:` is the only mandatory one.** The other three are declarations: a volume or a network listed at the top level is *created*, and a service then opts into it by name. Nothing is shared implicitly, which is exactly the pattern § 09 b describes for secrets, a service sees only what it lists.
+**`services:` is the only mandatory one.** The other three declare named resources or data. A service attaches a named volume, network, or secret by listing it in its own configuration; in particular, a secret is not available to a service unless explicitly granted.
 
 **Everything else nests inside a service:** `build`, `image`, `env_file`, `depends_on`, `restart`, `ports`. Those are per-container settings, so they have no meaning at the top level.
 
@@ -1198,12 +1137,12 @@ secrets:    files mounted read-only at /run/secrets/
 **A Dockerfile is a flat list of instructions. A Compose file is two levels**, and that split is the part worth getting straight first:
 
 ```text
-docker-compose.yml
+compose.yaml
 │
 ├── services:          what to run
-│   ├── mariadb:       service name, also its DNS hostname
+│   ├── database:      service name, also its DNS hostname
 │   │   └── build, volumes, networks, secrets, env_file, restart ...
-│   └── wordpress:
+│   └── web:
 │
 ├── networks:          resources the services reference by name
 ├── volumes:
@@ -1230,7 +1169,7 @@ docker-compose.yml
 | `networks` | the networks this container attaches to, referencing entries under the top-level `networks` |
 | `volumes` | mounts host paths or named volumes into the container |
 | `secrets` | grants access to secrets defined at top level. Each one lands at `/run/secrets/<name>` |
-| `ports` | publishes a container port on the host. Only nginx needs this |
+| `ports` | publishes a container port on the host |
 | `expose` | records a port as reachable from other containers. Documentation only, like Dockerfile `EXPOSE` |
 | `restart` | the policy applied on container termination: `no`, `always`, `on-failure`, `unless-stopped` |
 | `command` | overrides the image's `CMD` |
@@ -1239,47 +1178,25 @@ docker-compose.yml
 **Under a top-level block, every key is a name.** This is the part that is easy to get wrong with `secrets:`, because the word appears twice and means something different each time:
 
 ```yaml
-secrets:                                       # declare, once
-  db_password:                                 # ← the NAME of a secret
-    file: ../secrets/db_password.txt           # ← where its content comes from
-  db_root_password:
-    file: ../secrets/db_root_password.txt
-  credentials:
-    file: ../secrets/credentials.txt
+secrets:                               # declare, once
+  api_key:                             # ← the NAME of a secret
+    file: ./secrets/api_key.txt        # ← where its content comes from
 
 services:
-  wordpress:
-    secrets: [db_password, credentials]        # attach, by name
+  web:
+    secrets: [api_key]                 # attach, by name
 ```
 
 **The name decides the path, the filename does not.** `file:` is only a host path that Compose reads. What the container sees is `/run/secrets/<name>`, and the `.txt` never appears:
 
 ```text
-name in compose        file on host                      path in container
-db_password      ←──   ../secrets/db_password.txt   ──→  /run/secrets/db_password
-credentials      ←──   ../secrets/credentials.txt   ──→  /run/secrets/credentials
+name in compose     file on host                 path in container
+api_key       ←──   ./secrets/api_key.txt   ──→  /run/secrets/api_key
 ```
 
-**So the names are fixed by the scripts, not by taste.** Both entrypoints already read `/run/secrets/db_password` and `/run/secrets/credentials`. Renaming the file on the host changes nothing, renaming the key breaks both scripts.
+**The name is part of the container interface.** Renaming the host file changes nothing, but renaming the Compose key changes the path inside the container. Use environment variables or `env_file` for ordinary configuration and secrets for confidential values.
 
-**Why secrets rather than `.env` for these three.** The subject splits the two deliberately, and attaches the harshest penalty in the document to getting it wrong:
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> No password must be present in your Dockerfiles.
->
-> It is mandatory to use environment variables. Also, it is mandatory to use a .env file to store environment variables. It is strongly recommended that you use Docker secrets to store any confidential information. Any credentials, API keys, or passwords found in your Git repository (outside of properly configured secrets) will result in project failure.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
-**Both are mandatory, for different data.** `.env` is required and holds non-secret configuration such as `DOMAIN_NAME` and `MYSQL_USER`, which the subject's own example `.env` shows. Passwords go through `secrets:`, and `secrets/` is gitignored.
-
-**Two of these carry the project's hard constraints.** `driver_opts` under a top-level volume is what pins a named volume to `/home/login/data/` (`type: none`, `o: bind`, `device:` an absolute host path), and a user-defined network is what provides DNS at all:
+**A user-defined network also provides DNS between its services:**
 
 > Containers on the default bridge network can only access each other by IP addresses, unless you use the `--link` option, which is considered legacy.
 >
@@ -1287,31 +1204,7 @@ credentials      ←──   ../secrets/credentials.txt   ──→  /run/secret
 >
 > <sub><i>Docker, bridge network driver</i></sub>
 
-**That second sentence is why `DB_HOST=mariadb` resolves** inside the WordPress entrypoint, and why the subject can forbid the alternatives without leaving the containers unable to find each other:
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> Of course, using network: host or --link or links: is forbidden. The network line must be present in your docker-compose.yml file.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
-**And the restart policy is a requirement, not a preference:**
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> Your containers have to restart in case of a crash.
->
-> <sub><i>the subject</i></sub>
-
-</details>
+**That is why a service can connect to `database` by name instead of tracking a changing container IP address.** A restart policy separately controls whether Docker starts a container again after it exits.
 
 </details>
 
@@ -1330,33 +1223,14 @@ version: "3.8"     # delete this
 
 **It described which schema version the file targeted**, back when the format was versioned 2.0 through 3.8. The Compose Specification replaced that scheme, and Compose *"always uses the most recent schema to validate the Compose file, regardless of the `version` field."*
 
-**Leaving it in is not an error, but it is noise.** Measured with Compose v5.4.0:
+**Leaving it in is not an error, but it is noise.** Current Compose releases warn:
 
 ```
 WARN: the attribute `version` is obsolete, it will be ignored,
       please remove it to avoid potential confusion
 ```
 
-**The subject fixes the filename as `srcs/docker-compose.yml`**, and fixes who calls it:
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> All the files required for the configuration of your project must be placed in a srcs folder.
->
-> A Makefile is also required and must be located at the root of your directory. It must set up your entire application (i.e., it has to build the Docker images using docker-compose.yml).
->
-> You also have to write your own Dockerfiles, one per service. The Dockerfiles must be called in your docker-compose.yml by your Makefile.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
-**So the chain is fixed in one direction:** `make` calls Compose, Compose calls the Dockerfiles. Nothing is built by hand.
-
-Docker's own documentation has moved to `compose.yaml`, and both names are still found. If both files exist in one directory, `compose.yaml` wins and Compose warns that it found several.
+**The preferred filename is `compose.yaml`.** `compose.yml`, `docker-compose.yaml`, and `docker-compose.yml` are also supported for compatibility. If both a preferred and legacy filename exist, Compose selects the preferred one and warns about the ambiguity.
 
 </details>
 
@@ -1371,7 +1245,7 @@ Docker's own documentation has moved to `compose.yaml`, and both names are still
 
 ```
 docker compose up
-      │  reads docker-compose.yml
+      │  reads compose.yaml
       │  decides what should exist
       ▼
   dockerd            same REST API, same socket
@@ -1401,7 +1275,7 @@ docker-compose    V1, Python, separate binary, no longer maintained
 docker compose    V2 onward, Go, a plugin of the docker CLI
 ```
 
-**This machine runs Compose v5.4.0 with Docker 29.7.2**, so the space is the correct form. The hyphenated command may not exist at all, and any tutorial still using it predates the current format, which is usually also why it carries the obsolete `version:` line.
+**Use the space form in current documentation.** The hyphenated command may not exist on a modern installation, and tutorials that still use it often also carry the obsolete `version:` line.
 
 </details>
 
@@ -1419,7 +1293,7 @@ docker compose    V2 onward, Go, a plugin of the docker CLI
 
 > **A volume is a directory on the host that Docker mounts into a container, so the data written there survives the container.**
 
-**A container's filesystem dies with the container.** Remove the mariadb container and every table goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 c explains why. The writable layer belongs to the container, so it is destroyed with it.
+**A container's filesystem dies with the container.** Remove a database container and every table stored in its writable layer goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 c explains why.
 
 **Databases and uploaded media are the exception.** They are the one thing that must outlive the process that wrote them.
 
@@ -1427,18 +1301,11 @@ docker compose    V2 onward, Go, a plugin of the docker CLI
 
 ```
 container                        host
-/var/lib/mysql   ───────────────► a real directory on the disk
+/var/lib/data    ───────────────► a real directory on the disk
                                   survives docker rm, survives a rebuild
 ```
 
-**Nothing inside the container can tell the difference.** `mariadbd` opens `/var/lib/mysql` exactly as it would on a normal machine. The redirection happens in the mount namespace, § 02 b, before the process ever sees the path.
-
-**This project needs two of them:**
-
-```
-mariadb     /var/lib/mysql     the tables
-wordpress   /var/www/html      the PHP files and wp-content/uploads
-```
+**Nothing inside the container can tell the difference.** The application opens `/var/lib/data` exactly as it would on a normal machine. The redirection happens in the mount namespace, § 02 b, before the process ever sees the path.
 
 </details>
 
@@ -1451,8 +1318,8 @@ wordpress   /var/www/html      the PHP files and wp-content/uploads
 
 ```yaml
 volumes:
-  - /home/login/data/mariadb:/var/lib/mysql   ← bind mount
-  - mariadb_data:/var/lib/mysql                  ← named volume
+  - /srv/app-data:/var/lib/data   ← bind mount
+  - app_data:/var/lib/data        ← named volume
 ```
 
 | | Named volume | Bind mount |
@@ -1463,67 +1330,46 @@ volumes:
 | **exists as an object** | yes, with a name and a driver | no, it is only a path |
 | **copy-up on first mount** | yes | no |
 
-**Measured on this machine:**
+**A named volume can be inspected to find its Docker-managed location:**
 
 ```
 $ docker volume create probe_tmp && docker volume inspect probe_tmp
 /var/lib/docker/volumes/probe_tmp/_data | driver=local
 ```
 
-**Copy-up is the behaviour that matters for wordpress.** Mounting an *empty* named volume over a directory that already has files in the image copies those files into the volume. A bind mount never does this, it simply hides whatever was underneath. That is why `wp core download` can run at build time and the files still reach the volume, which § 09 b covers.
-
-**The subject requires named volumes**, and forbids the short bind-mount syntax above. It also requires the data to live under `/home/login/data/`, which is not where Docker puts named volumes by default. Those two requirements pull in opposite directions, and § 11 c is how both are satisfied.
+**Copy-up is a key behavioural difference.** Mounting an *empty* named volume over a directory that already contains files in the image copies those files into the volume. A bind mount never does this; it simply hides whatever was underneath.
 
 </details>
 
-<a id="c--driver_opts-satisfying-both-rules"></a>
+<a id="c--custom-host-paths-with-driver_opts"></a>
 <details>
-<summary><h2>c · <code>driver_opts</code>, satisfying both rules</h2></summary>
+<summary><h2>c · Custom host paths with <code>driver_opts</code></h2></summary>
 
 
-**The subject states both requirements in the same list:**
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> • A volume that contains your WordPress database.
->
-> • A second volume that contains your WordPress website files.
->
-> • **You must use Docker named volumes** for these two persistent storages. Bind mounts are not allowed for these volumes.
->
-> • **Both named volumes must store their data inside `/home/login/data`** on the host machine.
->
-> <sub><i>the subject, and later: "Your volumes will be available in the /home/login/data folder of the host machine using Docker."</i></sub>
-
-</details>
-
-**Named, but not where Docker names them.** `driver_opts` passes options to the volume driver, and the `local` driver accepts the three that redirect its storage:
+**A named volume normally uses a path chosen by Docker.** When a specific host directory is required, `driver_opts` can pass bind-mount options to the `local` volume driver:
 
 ```yaml
 volumes:
-  mariadb_volume:
+  app_data:
     driver_opts:
-      type: none                              no filesystem to create, pass through
-      o: bind                                 mount it as a bind
-      device: /home/login/data/mariadb     the host directory to use
+      type: none                  # no filesystem to create; pass through
+      o: bind                     # mount it as a bind
+      device: /srv/app-data       # host directory to use
 ```
 
 **It is still a named volume.** `docker volume ls` lists it, `docker volume rm` removes it, and copy-up still applies. Only the location changed.
 
-**The directory must already exist.** `type: none` creates nothing. Measured:
+**The directory must already exist.** `type: none` creates nothing. Otherwise the mount fails:
 
 ```
 failed to mount local volume:
-  mount /home/login/data/does-not-exist:/var/lib/docker/volumes/..._data
+  mount /srv/does-not-exist:/var/lib/docker/volumes/..._data
   no such file or directory
 ```
 
-The container never starts, and the directory is still missing afterwards. So the Makefile has to run `mkdir -p` before `docker compose up`.
+The container never starts, and the directory is still missing afterwards. Create the host directory before running `docker compose up`.
 
-**One device per volume.** Two volumes pointing at the same `device` is one directory with two names, and mariadb's tables would land beside WordPress's PHP files, in a directory nginx serves over HTTP.
+**Use one device per volume.** Two volumes pointing at the same `device` are two Docker names for one host directory, so unrelated application data becomes mixed together.
 
 </details>
 
@@ -1535,19 +1381,6 @@ The container never starts, and the directory is still missing afterwards. So th
 
 > **Docker networking determines how containers communicate. Docker can create virtual networks that act like virtual switches. Containers attached to the same network can communicate with each other.**
 
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> You have to set up a docker-network that establishes the connection between your containers.
->
-> Of course, using network: host or --link or links: is forbidden.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
 <br>
 
 ```text
@@ -1556,7 +1389,7 @@ The container never starts, and the directory is still missing afterwards. So th
               │ Virtual switch│
               └───┬────┬────┬─┘
                   │    │    │
-               nginx  WP  MariaDB
+                web  API  database
 ```
 
 <br>
@@ -1581,24 +1414,7 @@ Container
    └── No network
 ```
 
-<br>
-
-**In this project:**
-
-```text
-             inception network
-        ┌─────────────────────────┐
-        │                         │
-      nginx ─── wordpress ─── mariadb
-        │            │
-        │            └── redis
-        │
-        └── adminer
-        └── netdata
-        └── resume
-```
-
-> **In my project, I use a custom bridge network called `inception`, which allows my containers to communicate with each other by service name.**
+**A user-defined bridge network also provides DNS.** Containers can reach one another using their service or container names instead of tracking changing IP addresses.
 
 </details>
 
