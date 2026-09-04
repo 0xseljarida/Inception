@@ -1,5 +1,7 @@
 <h1 align="center">Inception · Notes</h1>
 
+<p align="center"><img src="assets/containers.jpeg" width="600"></p>
+
 ## Index
 
 <details>
