@@ -112,10 +112,6 @@
 <details>
 <summary><h1>01 · Why containers were invented</h1></summary>
 
-
-<p align="center"><img src="assets/containers.jpeg" width="500"></p>
-<p align="center"><i>the word was borrowed from shipping · the mechanism was not</i></p>
-
 **One server. 200 customers. Each one wants their own isolated website.**
 
 Three options existed:
