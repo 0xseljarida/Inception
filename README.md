@@ -174,6 +174,16 @@ Three options existed:
 
 **No virtual machine boots. No OS is emulated.** Run `ps` on the host and you find an ordinary process among your others: same kernel, same scheduler.
 
+<details>
+<summary><b>VISUAL · Many containers, one kernel</b></summary>
+
+<br>
+
+<p align="center"><img src="assets/containers_kernel.png" width="700"></p>
+<p align="center"><i>many containers · one shared kernel</i></p>
+
+</details>
+
 **So what makes it a container?** Only **what that process is allowed to perceive and consume**. The kernel gives it a restricted view of the machine, and every system call it makes is answered from that view.
 
 **Two kernel features enforce this:**
