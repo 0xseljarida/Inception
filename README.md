@@ -523,12 +523,24 @@ the process sees:  one merged /
 <summary><h1>05 · Docker architecture (client ↔ daemon)</h1></summary>
 
 
-> **Docker is client and server.** The `docker` command does almost nothing by itself.
+> **Docker uses a client-server architecture.** The Docker client talks to the Docker daemon, which does the heavy lifting of building, running, and distributing your Docker containers. The Docker client and daemon can run on the same system, or you can connect a Docker client to a remote Docker daemon. The Docker client and daemon communicate using a REST API, over UNIX sockets or a network interface.
+>
+> <sub><i><a href="https://docs.docker.com/get-started/docker-overview/">Docker's own definition</a></i></sub>
 
-**The daemon does the work.** In Docker's own words: *"The Docker client talks to the Docker daemon, which does the heavy lifting of building, running, and distributing your Docker containers."* `dockerd` listens for API requests and manages images, containers, networks and volumes.
+`dockerd` listens for API requests and manages Docker objects such as images, containers, networks, and volumes.
 
 <p align="center"><img src="assets/Docker-engine-components-flow.png" width="500"></p>
 <p align="center"><i>the Docker client reaches the daemon through the REST API</i></p>
+
+<details>
+<summary><b>DEEPDIVE · Docker architecture diagram</b></summary>
+
+<br>
+
+<p align="center"><img src="assets/docker_archi.png" width="900"></p>
+<p align="center"><i>the client sends commands to the daemon, which manages local objects and communicates with registries</i></p>
+
+</details>
 
 
 <a id="a--the-cli-is-a-docker-api-client"></a>
