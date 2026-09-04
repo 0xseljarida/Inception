@@ -179,7 +179,7 @@ Three options existed:
 
 <br>
 
-<p align="center"><img src="assets/containers_kernel.png" width="700"></p>
+<p align="center"><img src="assets/containers_kernel.webp" width="700"></p>
 <p align="center"><i>many containers · one shared kernel</i></p>
 
 </details>
