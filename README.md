@@ -689,6 +689,8 @@ containerd is an independent CNCF project, not a Docker-only component. Docker E
 
 This separation gives higher-level platforms their own user-facing features while sharing the same lower-level container lifecycle and OCI runtime machinery.
 
+**Further reading:** [containerd Runtime v2](https://github.com/containerd/containerd/blob/main/docs/runtime-v2.md) · [OCI Runtime Specification](https://github.com/opencontainers/runtime-spec/blob/main/spec.md) · [Docker live restore](https://docs.docker.com/engine/daemon/live-restore/)
+
 </details>
 
 </details>
