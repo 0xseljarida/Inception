@@ -296,12 +296,12 @@ task_struct  (one per process)
 ```
 
 <p align="center"><img src="assets/task_struct-nsproxy.png" width="520"></p>
-<p align="center"><i>include/linux/sched.h · a pointer, not the namespaces themselves</i></p>
+<p align="center"><i><a href="https://github.com/torvalds/linux/blob/master/include/linux/sched.h"><code>include/linux/sched.h</code></a> · a pointer, not the namespaces themselves</i></p>
 
 **And what it points to is just a box of pointers**, one per namespace type:
 
 <p align="center"><img src="assets/struct-nsproxy.png" width="560"></p>
-<p align="center"><i>include/linux/nsproxy.h</i></p>
+<p align="center"><i><a href="https://github.com/torvalds/linux/blob/master/include/linux/nsproxy.h"><code>include/linux/nsproxy.h</code></a></i></p>
 
 **`pid` is the odd one.** The field is `pid_ns_for_children`, not the process's own pid namespace. A process never changes pid namespace once it exists, so nsproxy carries the one its *children* will get. The kernel says this in the comment above the struct: the task's own is reached through `task_active_pid_ns()`.
 
@@ -441,7 +441,7 @@ It turns the low-level pieces of containerization into a workflow a developer ca
 
 > **A container image is a standardized package that includes all of the files, binaries, libraries and configurations to run a container.**
 >
-> <sub><i>Docker's own definition</i></sub>
+> <sub><i><a href="https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-an-image/">Docker's own definition</a></i></sub>
 
 **In plainer words:** your whole setup saved as one package you can copy to any machine. The OS files, your app, its dependencies and its config, together.
 
@@ -1083,7 +1083,7 @@ Each `RUN` executes in a temporary container whose process is already root, so `
 
 > **Docker Compose is a tool for defining and running multi-container applications.**
 >
-> <sub><i>Docker's own definition</i></sub>
+> <sub><i><a href="https://docs.docker.com/compose/">Docker's own definition</a></i></sub>
 
 **A Dockerfile builds one image. Nothing in it describes a stack.** It cannot say which containers exist together, which network they share, which volumes persist, or what starts before what. Those are relationships *between* containers, and there is nowhere in a Dockerfile to write them down.
 
