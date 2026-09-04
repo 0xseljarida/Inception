@@ -607,18 +607,23 @@ With the usual rootful Docker daemon, anyone in the `docker` group can request p
 <summary><h2>b · dockerd, containerd, shim, runc</h2></summary>
 
 
-**`dockerd` does not start containers itself.** It hands the job down a chain:
+**`dockerd` does not create container processes directly.** It coordinates the operation and delegates the low-level work through this chain:
 
 ```
 docker CLI  ──>  dockerd  ──>  containerd  ──>  containerd-shim  ──>  runc  ──>  kernel
 ```
 
-| | Does |
-|:--|:--|
-| **dockerd** | the Docker API, images, builds, networks, volumes, the CLI-facing features |
-| **containerd** | container lifecycle: pull, unpack, start, stop, supervise |
-| **containerd-shim** | bridges containerd to the runtime, keeps container I/O and exit status available, and may supervise one or more containers |
-| **runc** | actually creates the container: `clone()` with the namespace flags, writes the cgroup files, `exec`s your process, then **exits immediately** |
+1. **`dockerd` handles Docker-level features.** It receives API requests and decides which images, networks, volumes, ports, and container settings are required.
+
+2. **`containerd` manages the container lifecycle.** It prepares images and filesystems, then coordinates creating, starting, stopping, and deleting containers.
+
+3. **`containerd-shim` connects containerd to the runtime.** It invokes the runtime and remains available to supervise the container process, preserve its I/O, and report its exit status.
+
+4. **`runc` creates the isolated process.** It applies the OCI configuration—namespaces, cgroups, mounts, and capabilities—starts the process, and then exits.
+
+
+<p align="center"><img src="assets/docker_use_containerd.png" width="574"></p>
+<p align="center"><i>a simplified container-creation path · each <code>runc</code> invocation exits after starting the container process · <a href="https://mlops-for-all.github.io/en/docs/prerequisites/docker/">source</a></i></p>
 
 **`runc` performs the low-level container setup**: namespaces, cgroups, capabilities, mounts, and process creation. Once the container process is running, `runc` exits; the shim remains.
 
@@ -3640,3 +3645,5 @@ MAIN : Found 0 legacy dbengines, setting multidb diskspace to 256MB
 </details>
 
 </details>
+
+https://mlops-for-all.github.io/en/docs/prerequisites/docker/
