@@ -634,36 +634,42 @@ docker CLI  ──>  dockerd  ──>  containerd  ──>  containerd-shim  ─
 
 <br>
 
+### 1. The requests cross three different interfaces
 
-- **`dockerd`**: the **Docker daemon** that manages Docker resources and translates Docker API requests into container operations.
-- **`containerd`**: a **container runtime manager** that manages the lifecycle, images, and execution of containers, delegating the actual Linux isolation and process creation to a runtime such as `runc`.
-
-**Stop thinking of them as two things that both "run containers".** They have different responsibilities.
-
-```
-docker CLI
-    │
-    │ HTTP API
-    ▼
- dockerd
-    │
-    │ gRPC
-    ▼
-containerd
-    │
-    │ manages container runtime
-    ▼
-containerd-shim-runc-v2
-    │
-    ▼
-   runc
-    │
-    │ creates Linux isolation
-    ▼
-your process
+```bash
+docker run -d --name web -p 8080:80 nginx
 ```
 
-**The shim separates the running process from the short-lived runtime.** A common standalone Docker process tree looks like this:
+That single command crosses several boundaries:
+
+```
+docker CLI  ──REST/HTTP──>  dockerd  ──gRPC──>  containerd  ──ttrpc──>  containerd-shim
+```
+
+The CLI first sends Docker API requests such as `POST /containers/create` and `POST /containers/{id}/start`. `dockerd` translates Docker concepts—image names, published ports, networks, mounts, environment variables, and restart policies—into the configuration needed by the lower layers.
+
+On a typical Linux installation, `dockerd` reaches containerd's gRPC API through a Unix socket. containerd then communicates with the runtime shim over ttrpc. These are API relationships, not necessarily parent-child relationships between the processes.
+
+<br>
+
+### 2. Creation and execution are separate operations
+
+containerd stores the container metadata and prepares a filesystem snapshot from the image. Starting the container is a separate step: containerd asks `containerd-shim-runc-v2` to create a task, and the shim invokes `runc` with an OCI bundle.
+
+That bundle contains two important things:
+
+- a root filesystem for the process
+- an OCI configuration describing its command, namespaces, cgroups, mounts, capabilities, and other runtime settings
+
+`runc` asks the Linux kernel to apply that configuration and starts the requested command. The result is an ordinary Linux process—not a daemon maintained by `runc`.
+
+<br>
+
+### 3. Why the shim remains after `runc` exits
+
+Once the process is running, `runc` exits. The shim remains as the stable contact point for containerd: it keeps the container's standard input and output available, reports its exit status, and allows containerd to reconnect after a restart.
+
+A common process tree therefore looks like this:
 
 ```text
 systemd (PID 1)
@@ -671,146 +677,17 @@ systemd (PID 1)
        └─ container process
 ```
 
-Runtime v2 does not require a strict one-shim-per-container design; a shim implementation may manage one container or a related group.
+Runtime v2 does not require exactly one shim per container; a shim implementation may manage one container or a related group.
 
-**This does not mean restarting Docker is harmless by default.** Docker normally shuts down running containers when the daemon terminates. Containers remain running across a daemon outage only when `live-restore` is enabled.
-
-**`containerd` is not Docker-only.** It is an independent CNCF project, and systems such as Kubernetes can use it through the Container Runtime Interface without `dockerd`.
+The shim's independence does **not** mean that restarting Docker always preserves running containers. Docker normally stops them when the daemon shuts down cleanly. Keeping containers alive while the daemon is unavailable requires Docker's `live-restore` option.
 
 <br>
 
-### 1. What `dockerd` actually does
+### 4. Why containerd is a separate layer
 
-Type this:
+containerd is an independent CNCF project, not a Docker-only component. Docker Engine uses it, while other systems can use it without `dockerd`; Kubernetes, for example, can communicate with containerd through the Container Runtime Interface.
 
-```bash
-docker run -d --name web -p 8080:80 nginx
-```
-
-**The CLI does not create a process.** It sends a request to `dockerd`, conceptually:
-
-```
-POST /containers/create
-{
-    image: "nginx",
-    name:  "web",
-    ports: ...
-}
-```
-
-**Then `dockerd` makes all the Docker-specific decisions:**
-
-- what does `nginx` mean, and does that image exist locally?
-- if not, pull it from a registry
-- which network, which IP, which port mapping?
-- which volumes and bind mounts?
-- which environment variables, which restart policy?
-
-**`dockerd` constructs the desired container configuration.** This translation from Docker-level features into a concrete runtime request is one of its core jobs.
-
-<br>
-
-### 2. What `containerd` does
-
-Once `dockerd` has decided *"I want a container with these properties"*, it asks `containerd` to manage the actual lifecycle.
-
-**`containerd` knows nothing about the Docker CLI.** Its concern is narrower:
-
-> *"I have an OCI image and an OCI runtime specification. I need to create and manage a container from them."*
-
-It handles:
-
-- image and layer management
-- filesystem snapshots
-- container lifecycle: start, stop, delete
-- talking to the runtime, and managing the container's shim
-
-<br>
-
-### 3. Where the actual process comes from
-
-**`containerd` does not perform the namespace setup either.** It goes through the shim to `runc`:
-
-```
-containerd
-    ↓
-containerd-shim-runc-v2
-    ↓
-runc
-```
-
-**`runc` is what performs the low-level creation**, using:
-
-```
-namespaces
-cgroups
-mounts
-capabilities
-seccomp
-pivot_root
-execve()
-```
-
-The result is an ordinary Linux process, placed inside the right namespaces and cgroups:
-
-```
-PID 12345  nginx
-```
-
-<br>
-
-### 4. The separation, in one line each
-
-**dockerd** = Docker's API and configuration layer *(the brain)*
-**containerd** = container lifecycle manager
-**runc** = low-level container creator
-**Linux kernel** = what actually provides the isolation
-
-<br>
-
-### 5. Why not just dockerd → runc?
-
-**Historically, it was.** Most of the container machinery lived inside Docker itself, and was split out later. The split is what makes `containerd` useful **without** Docker:
-
-```
-Docker ecosystem          Kubernetes
-      │                        │
-   dockerd                    CRI
-      │                        │
-  containerd               containerd
-      │                        │
-    runc                     runc
-```
-
-No `dockerd` required on the right-hand side.
-
-<br>
-
-### The distinction to keep in your head
-
-`docker run nginx` asks **three different questions**:
-
-| Question | Answered by |
-|:--|:--|
-| What should this container look like? | `dockerd` |
-| How do I manage its lifecycle and filesystem? | `containerd` |
-| How do I turn that into a Linux process with namespaces and cgroups? | `runc` |
-
-And underneath all of them:
-
-```
-                 Linux kernel
-                      ▲
-                    runc
-                      ▲
-          containerd-shim-runc-v2
-                      ▲
-                 containerd
-                      ▲
-                   dockerd
-                      ▲
-                 docker CLI
-```
+This separation gives higher-level platforms their own user-facing features while sharing the same lower-level container lifecycle and OCI runtime machinery.
 
 </details>
 
