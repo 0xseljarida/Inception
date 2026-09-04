@@ -116,7 +116,7 @@
 
 **Imagine one server hosting websites for 200 customers. Each customer needs their website isolated from everyone else's.**
 
-<p align="center"><img src="assets/hosting-options.webp" width="900"></p>
+<p align="center"><img src="assets/hosting-options.webp" width="650"></p>
 <p align="center"><i>the obvious options are expensive, unsafe, or heavy</i></p>
 
 Three options existed:
@@ -133,7 +133,7 @@ Three options existed:
 
 > **Containerization is the answer.** Keep one operating system and use the kernel to **isolate and control what each process can see and use**. The result is what we call a **container**, which is essentially an isolated process.
 
-<p align="center"><img src="assets/container-solution.webp" width="430"></p>
+<p align="center"><img src="assets/container-solution.webp" width="230"></p>
 <p align="center"><i>containers provide lightweight isolation while sharing the host kernel</i></p>
 
 > **Note:** the "200 customers" framing above is a teaching device, not history.
