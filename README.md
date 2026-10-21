@@ -1,6 +1,6 @@
 <h1 align="center">Inception · Notes</h1>
 
-<p align="center"><img src="assets/containers.jpeg" width="600"></p>
+<p align="center"><img src="assets/containers_kernel.png" alt="Container ship labeled Linux kernel" width="600"></p>
 
 ## Index
 
@@ -183,7 +183,7 @@ Three options existed:
 
 <br>
 
-<p align="center"><img src="assets/containers_kernel.webp" width="700"></p>
+<p align="center"><img src="assets/containers_kernel.png" width="700"></p>
 <p align="center"><i>many containers · one shared kernel</i></p>
 
 </details>
