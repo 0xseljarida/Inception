@@ -2,19 +2,21 @@
 
 <p align="center"><img src="assets/containers_kernel.png" alt="Container ship labeled Linux kernel" width="600"></p>
 
+Since “you have to know the past to understand the present,” I included the history behind these technologies (containers, Docker, MariaDB...). Reading it is optional, but it will help make things suckless.
+
 ## Index
 
 <details>
-<summary>01 · Why containers were invented</summary>
+<summary><a href="#01--why-containers">01 · Why Containers?</a></summary>
 
 * a · Container vs Virtual Machine
 
 </details>
 
 <details>
-<summary>02 · What is a container?</summary>
+<summary><a href="#02--what-is-a-container">02 · What is a container?</a></summary>
 
-* a · Containers are much older than Docker
+* a · History
 * b · Namespaces, what it sees
 * c · Where namespaces actually live
 * d · cgroups, what it uses
@@ -22,11 +24,11 @@
 
 </details>
 
-<div>&emsp;03 · What Docker is</div>
+<div>&emsp;<a href="#03--what-docker-is">03 · What Docker is</a></div>
 <br>
 
 <details>
-<summary>04 · Docker image</summary>
+<summary><a href="#04--docker-image">04 · Docker image</a></summary>
 
 * a · Definition
 * b · Docker images vs. containers
@@ -35,7 +37,7 @@
 </details>
 
 <details>
-<summary>05 · Docker architecture (client ↔ daemon)</summary>
+<summary><a href="#05--docker-architecture">05 · Docker architecture (client ↔ daemon)</a></summary>
 
 * a · The CLI is a Docker API client
 * b · dockerd, containerd, shim, runc
@@ -43,7 +45,7 @@
 </details>
 
 <details>
-<summary>06 · Dockerfile</summary>
+<summary><a href="#06--dockerfile">06 · Dockerfile</a></summary>
 
 * a · Instructions and layers
 * b · FROM
@@ -54,11 +56,11 @@
 
 </details>
 
-<div>&emsp;07 · Docker Compose</div>
+<div>&emsp;<a href="#07--docker-compose">07 · Docker Compose</a></div>
 <br>
 
 <details>
-<summary>08 · Volumes</summary>
+<summary><a href="#08--volumes">08 · Volumes</a></summary>
 
 * a · Why containers need them
 * b · Named volumes and bind mounts
@@ -66,11 +68,11 @@
 
 </details>
 
-<div>&emsp;09 · Docker networking</div>
+<div>&emsp;<a href="#09--docker-networking">09 · Docker networking</a></div>
 <br>
 
 <details>
-<summary>10 · MariaDB</summary>
+<summary><a href="#10--mariadb">10 · MariaDB</a></summary>
 
 * a · What MariaDB is
 * b · MariaDB, the container
@@ -78,7 +80,7 @@
 </details>
 
 <details>
-<summary>11 · WordPress</summary>
+<summary><a href="#11--wordpress">11 · WordPress</a></summary>
 
 * a · What WordPress is
 * b · The WordPress container
@@ -86,7 +88,7 @@
 </details>
 
 <details>
-<summary>12 · nginx</summary>
+<summary><a href="#12--nginx">12 · nginx</a></summary>
 
 * a · What nginx is
 * b · The configuration files
@@ -95,11 +97,11 @@
 
 </details>
 
-<div>&emsp;13 · The Makefile</div>
+<div>&emsp;<a href="#13--the-makefile">13 · The Makefile</a></div>
 <br>
 
 <details>
-<summary>14 · Bonus</summary>
+<summary><a href="#14--bonus">14 · Bonus</a></summary>
 
 * a · A static website
 * b · Adminer
@@ -110,9 +112,9 @@
 
 ---
 
-<a id="01--why-containers-were-invented"></a>
+<a id="01--why-containers"></a>
 <details>
-<summary><h1>01 · Why containers were invented</h1></summary>
+<summary><h1>01 · Why Containers?</h1></summary>
 
 **Imagine one server hosting websites for 200 customers. Each customer needs their website isolated from everyone else's.**
 
@@ -130,7 +132,7 @@ Three options existed:
 
 > **Can one machine host many isolated tenants without pretending to be 200 machines?**
 
-> **Containerization is the answer.** Keep one operating system and use some kernel features to **isolate and control what each process can see and use**. The result is what we call a **container**, which is essentially an isolated process.
+> **Containerization makes this possible.** Keep one operating system and use some kernel features to **isolate and control what each process can see and use**. The result is what we call a **container**, which is essentially an isolated process.
 
 > **Note:** the "200 customers" framing above is a teaching device, not history.
 > A 2005 host would have answered "shared hosting".
@@ -155,7 +157,7 @@ Three options existed:
 | **Storage** | hard to share between VMs | shared freely between host and containers |
 | **Isolation** | strong, hardware level | weaker, same kernel |
 
-**The last row is the trade.** A VM's boundary is a hypervisor and hard to escape. A container's boundary is kernel bookkeeping, so a kernel bug crosses it.
+**Isolation is the tradeoff:** containers share a kernel, so a kernel vulnerability can break their isolation.
 
 
 </details>
@@ -171,6 +173,8 @@ Three options existed:
 <p align="center"><i>the container is a Linux mechanism · Docker only makes it easy to use</i></p>
 
 > **A container is a Linux process running in an isolated environment, where the kernel restricts and controls what the process can see and access.**
+
+Containerization is an operating-system-level virtualization technique that isolates processes and their view of system resources while allowing them to share the host's kernel.
 
 **No virtual machine boots. No OS is emulated.** Run `ps` on the host and you find an ordinary process among your others: same kernel, same scheduler.
 
@@ -194,10 +198,12 @@ Three options existed:
 | **cgroups**    | what a process can **use** | resource limits |
 
 
-<a id="a--containers-are-much-older-than-docker"></a>
+<a id="a--history"></a>
 <details>
-<summary><h2>a · Containers are much older than Docker</h2></summary>
+<summary><h2>a · History</h2></summary>
 
+
+People started talking about Linux containers in the mid-2000s, when Google created process containers in 2006 (later renamed cgroups and merged into the Linux kernel), followed by the release of LXC (Linux Containers) in 2008.
 
 **None of this was invented in 2013.** The mechanism was already solved and in production:
 
@@ -207,17 +213,25 @@ Three options existed:
 2004  Solaris Containers  the word ships in a product
 2006  cgroups             Google adds resource limits to Linux
 2008  LXC                 first container manager using only mainline kernel features
-2013  Docker              built on LXC at first
+2013  Docker              initially used LXC; introduced its own libcontainer on 10 March 2014 (v0.9)
 ```
 
-**Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC .
+**Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC (Linux Containers).
+
+Docker's founder, **Solomon Hykes**, first demonstrated it at PyCon on 15 March 2013, in a short talk titled [“The future of Linux Containers”](https://www.youtube.com/watch?v=362sHaO5eGU). His team at dotCloud already used Linux containers, but the tools were complicated and difficult for other developers to adopt.
+
+Check out [this one-minute bit about Docker's history](https://www.youtube.com/watch?v=GVVtR_hrdKI&t=966s). Just one minute, you TikTok-brained scroller. You can do this.
 
 <details>
-<summary><b>DEEPDIVE</b></summary>
+<summary><b>LXC DEEPDIVE</b></summary>
 	
 ### LXC
 
 Linux Containers (LXC) is an operating system-level virtualization method for running multiple isolated Linux systems (containers) on a control host using a single Linux kernel.
+
+From [linuxcontainers.org](https://linuxcontainers.org/):
+
+> Our focus is providing containers and virtual machines that run full Linux systems. While VMs supply a complete environment, system containers offer an environment as close as possible to the one you'd get from a VM, but without the overhead that comes with running a separate kernel and simulating all the hardware.
 
 The Linux kernel provides the cgroups functionality that allows limitation and prioritization of resources (CPU, memory, block I/O, network, etc.) without the need for starting any virtual machines, and also the namespace isolation functionality that allows complete isolation of an application's view of the operating environment, including process trees, networking, user IDs and mounted file systems.[3]
 
@@ -3536,3 +3550,9 @@ MAIN : Found 0 legacy dbengines, setting multidb diskspace to 256MB
 </details>
 
 https://mlops-for-all.github.io/en/docs/prerequisites/docker/
+
+[Solomon Hykes — The future of Linux Containers (PyCon 2013)](https://www.youtube.com/watch?v=362sHaO5eGU)
+
+[dotScale 2013 — Solomon Hykes — Why we built Docker](https://www.youtube.com/watch?v=3N3n9FzebAA&t=1054s)
+
+[Linux Containers — Official website](https://linuxcontainers.org/)
