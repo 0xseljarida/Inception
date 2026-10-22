@@ -2,7 +2,7 @@
 
 <p align="center"><img src="assets/containers_kernel.png" alt="Container ship labeled Linux kernel" width="600"></p>
 
-Since “you have to know the past to understand the present”, I included the history behind these technologies (containers, Docker, MariaDB...). Reading it is optional, but it will help make things suckless.
+Since “you have to know the past to understand the present”, I included the history behind these technologies (containers, Docker, MariaDB...). Reading it is optional, but it will help you make sense of things and make them suckless.
 
 ## Index
 
@@ -81,8 +81,9 @@ Since “you have to know the past to understand the present”, I included the 
 <details>
 <summary><a href="#10--mariadb">10 · MariaDB</a></summary>
 
-* a · What MariaDB is
-* b · MariaDB, the container
+* a · History
+* b · MariaDB deep dive
+* c · MariaDB, the container
 
 </details>
 
@@ -1345,16 +1346,10 @@ Docker Engine performs the container operations; these containers also appear in
 <details>
 <summary><h1>10 · MariaDB</h1></summary>
 
+> **MariaDB is an open-source relational database management system (RDBMS) that stores and manages structured data in tables and provides an SQL interface for accessing and manipulating that data.**
 
 <p align="center"><img src="assets/mariadb_image.png" width="400"></p>
-<p align="center"><i>Notice how Docker, MariaDB, MySQL, Linux, and GNU all have animal logos?</i></p>
-
-<a id="a--what-mariadb-is"></a>
-<details>
-<summary><h2>a · What MariaDB is</h2></summary>
-
-
-> **MariaDB is an open-source relational database management system (RDBMS) that stores and manages structured data in tables and provides an SQL interface for accessing and manipulating that data.**
+<p align="center"><i>Notice how Docker, MariaDB, MySQL, PostgreSQL, Linux, GNU... all have animal logos?</i></p>
 
 **It does four things:**
 
@@ -1373,9 +1368,47 @@ MariaDB client                    MariaDB server
   receives results                  executes SQL
 ```
 
-**The last point is the one that matters for Inception.** MariaDB is not a library linked into WordPress. It is a separate long-running process, which is exactly why it gets its own container.
+<br>
+
+<a id="mariadb-history"></a>
+<details>
+<summary><h2>a · History</h2></summary>
+
+<br>
+
+**MariaDB was created in 2009 as a fork of MySQL by its original developers**, after Oracle acquired MySQL through its purchase of Sun Microsystems.
+
+**The goal was an independent, community-driven alternative** to an Oracle-controlled MySQL, while keeping strong MySQL compatibility.
+
+**That compatibility explains the naming you meet everywhere in this project.** MariaDB kept the wire protocol on port 3306, the SQL syntax, the system table names, and the on-disk paths:
 
 ```
+/var/lib/mysql          the data directory
+/run/mysqld/mysqld.sock the Unix socket
+mysql                   the system database
+mysql                   the Linux system account
+```
+
+**The binaries were renamed in MariaDB 10.5, and the old names survive as symlinks:**
+
+```
+/usr/bin/mysql    ──symlink──►  /usr/bin/mariadb      the client
+/usr/sbin/mysqld  ──symlink──►  /usr/sbin/mariadbd    the daemon
+```
+
+**Prefer the `mariadb` names.** The `mysql` symlinks exist only so that existing scripts keep working.
+
+</details>
+
+<a id="b--mariadb-deep-dive"></a>
+<details>
+<summary><h2>b · MariaDB deep dive</h2></summary>
+
+<br>
+
+**MariaDB also follows a client-server model.** The client sends SQL queries; `mariadbd`, the server, executes them and manages the data. In this project, WordPress is a client through PHP's database library:
+
+```text
 wordpress container
   php-fpm + PHP's client library
     │
@@ -1385,17 +1418,10 @@ mariadb container
   mariadbd, the daemon
     │
     ▼
-/var/lib/mysql   (files on disk)
+/var/lib/mysql   (files on disk)  <-- What the hell is MySQL doing here? Isn't this MariaDB?
 ```
 
-<br>
-
-<details>
-<summary><b>DEEPDIVE</b></summary>
-
-<br>
-
-**The split is blunt: the client transports, the server thinks.**
+Read [History](#mariadb-history). It'll make sense.
 
 **A client is any program that speaks MariaDB's client/server protocol.** It is not necessarily the `mariadb` binary:
 
@@ -1421,7 +1447,7 @@ client                                   server (mariadbd)
   │   COM_QUERY "SELECT ..." ──────────► │  parse the SQL
   │                                      │  check privileges
   │                                      │  plan and execute
-  │                                      │  read /var/lib/mysql
+  │                                      │  read /var/lib/mysql  <-- MySQL again? See History above.
   │   ◄──────────── result set packets   │
 ```
 
@@ -1450,40 +1476,9 @@ client                                   server (mariadbd)
 
 <br>
 
+<a id="c--mariadb-the-container"></a>
 <details>
-<summary><b>History: why a fork of MySQL exists</b></summary>
-
-<br>
-
-**MariaDB was created in 2009 as a fork of MySQL by its original developers**, after Oracle acquired MySQL through its purchase of Sun Microsystems.
-
-**The goal was an independent, community-driven alternative** to an Oracle-controlled MySQL, while keeping strong MySQL compatibility.
-
-**That compatibility explains the naming you meet everywhere in this project.** MariaDB kept the wire protocol on port 3306, the SQL syntax, the system table names, and the on-disk paths:
-
-```
-/var/lib/mysql          the data directory
-/run/mysqld/mysqld.sock the Unix socket
-mysql                   the system database
-mysql                   the Linux system account
-```
-
-**The binaries were renamed in MariaDB 10.5, and the old names survive as symlinks:**
-
-```
-/usr/bin/mysql    ──symlink──►  /usr/bin/mariadb      the client
-/usr/sbin/mysqld  ──symlink──►  /usr/sbin/mariadbd    the daemon
-```
-
-**Prefer the `mariadb` names.** The `mysql` symlinks exist only so that existing scripts keep working.
-
-</details>
-
-</details>
-
-<a id="b--mariadb-the-container"></a>
-<details>
-<summary><h2>b · MariaDB, the container</h2></summary>
+<summary><h2>c · MariaDB, the container</h2></summary>
 
 
 **Three files build this service**, and each answers a different question:
@@ -1510,13 +1505,13 @@ COPY conf/99-inception.cnf /etc/mysql/mariadb.conf.d/99-inception.cnf
 COPY --chmod=755 tools/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+CMD ["mariadbd", "--user=mysql"]
 ```
 
-**Everything lives in one `RUN`** for the reason in § 06 c: a deletion in a later layer only hides files, it does not remove their bytes from the image.
+**Install MariaDB and clear the package-created database files.** This leaves initialisation to the entrypoint. Installation and cleanup share one `RUN`; see § 06 c for layers and cleanup.
 
-**`rm -rf /var/lib/mysql/*` is the line that is easy to miss.** Debian's `mariadb-server` package runs `mariadb-install-db` in its post-install script, so the image ships with an already-initialised data directory. That silently breaks the entrypoint, as explained below.
-
-**`COPY --chmod=755`** sets the executable bit during the copy, replacing a separate `RUN chmod +x` and the extra layer it would create.
+`COPY --chmod=755` makes the entrypoint executable. `ENTRYPOINT` selects that script, and `CMD` supplies its default command: `mariadbd --user=mysql`.
 
 <br>
 
@@ -1529,7 +1524,16 @@ port             = 3306
 skip-name-resolve
 ```
 
-**Only settings whose default is wrong belong here.** Debian ships `bind-address = 127.0.0.1`, meaning the daemon listens only on the loopback interface of its own network namespace, so the wordpress container could never reach it.
+| Setting | Purpose |
+|:--|:--|
+| `bind-address = 0.0.0.0` | listens on all IPv4 interfaces inside the container, so WordPress can connect |
+| `port = 3306` | explicitly keeps MariaDB's default TCP port |
+| `skip-name-resolve` | disables DNS lookups for client hostnames |
+
+[MariaDB: Server variables](https://mariadb.com/docs/server/server-management/variables-and-modes/server-system-variables#skip_name_resolve)
+
+<details>
+<summary><b>DEEPDIVE · Configuration loading</b></summary>
 
 **The file is not replacing Debian's, it is overriding it.** `/etc/mysql/mariadb.conf.d/` is read in alphabetical order and, in MariaDB's own words, *"if an option is set multiple times, the later setting will override the earlier setting."*
 
@@ -1539,6 +1543,10 @@ skip-name-resolve
 ```
 
 **Both files are read.** Nothing is skipped. `my_print_defaults mysqld` prints the resulting list in order, showing both values, and the daemon applies the last one.
+
+[MariaDB: Option files](https://mariadb.com/docs/server/server-management/install-and-upgrade-mariadb/configuring-mariadb/configuring-mariadb-with-option-files)
+
+</details>
 
 <br>
 
@@ -1559,43 +1567,47 @@ if [ ! -d "/var/lib/mysql/mysql" ]; then
 	mariadb-install-db --user=mysql --datadir=/var/lib/mysql
 
 	cat > /tmp/init.sql <<EOF
-CREATE DATABASE IF NOT EXISTS \`${MYSQL_DATABASE}\`;
-CREATE USER '${MYSQL_USER}'@'%' IDENTIFIED BY '${MYSQL_PASSWORD}';
-GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_USER}'@'%';
-ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
+	CREATE DATABASE IF NOT EXISTS \`${MYSQL_DATABASE}\`;
+	CREATE USER '${MYSQL_USER}'@'%' IDENTIFIED BY '${MYSQL_PASSWORD}';
+	GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_USER}'@'%';
+	ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';
 EOF
 
-	exec mariadbd --user=mysql --init-file=/tmp/init.sql
+	exec "$@" --init-file=/tmp/init.sql
 fi
 
-exec mariadbd --user=mysql
+exec "$@"
 ```
 
-**Why a script exists at all.** Pulling `mariadb` from Docker Hub would do all of this for you, and that is exactly what is forbidden:
+**Initialisation happens when the container starts**, because that is when the data volume, configuration, and secrets are available. This project builds MariaDB from Debian and supplies its own startup script.
 
-<details>
-<summary><b>Proof from the subject</b></summary>
+**Prepare the runtime directory.** The script creates `/run/mysqld` and gives `mysql` ownership. This container starts the daemon directly, so the entrypoint prepares that directory.
+
+**Read the configuration.** Passwords come from secret files under `/run/secrets/`. The database and account names come from environment variables, passed by Compose's `env_file`.
+
+**Check for system tables.** The guard skips initialisation when `/var/lib/mysql/mysql` exists. That directory is created before the application's SQL runs, so its presence does not prove setup completed. An interrupted setup can leave partial initialisation.
+
+**Start the server.** `"$@"` forwards the command and arguments from `CMD`. `exec` replaces the shell with `mariadbd`, making the daemon PID 1 so it receives Docker's stop signal directly.
+
+```text
+system tables missing                 system tables present
+          ↓                                     ↓
+mariadb-install-db                    skip initialisation
+write /tmp/init.sql                             │
+          ↓                                     ↓
+exec "$@" --init-file=...              exec "$@"
+          ↓                                     ↓
+mariadbd runs the initial SQL          mariadbd starts normally
+          ↓                                     ↓
+      serves queries                       serves queries
+```
+
+[Docker: Entrypoint](https://docs.docker.com/reference/dockerfile/#entrypoint)
 
 <br>
 
-> This means you have to build the Docker images of your project yourself. It is then forbidden to pull ready-made Docker images, as well as using services such as DockerHub (Alpine/Debian being excluded from this rule).
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
-**So the initialisation has to be written by hand, and it has to happen at run time.** A `RUN` finishes at build time, long before any daemon exists, and the volume mounts over `/var/lib/mysql` only when the container starts. The database, the account and the passwords can only be created then.
-
-**`mkdir -p /run/mysqld`, because there is no init system.** On a real Debian machine `systemd-tmpfiles` recreates that directory at every boot, since `/run` is a tmpfs and no package may ship files there. A container has no systemd, so nothing does it, and `mariadbd` aborts with *"Can't start server : Bind on unix socket"*.
-
-**Two values come from files, two from the environment.** Passwords arrive as Docker secrets mounted at `/run/secrets/`, so they never appear in `docker inspect` or in the image. The database and account names are non-secret and arrive as environment variables from `.env`.
-
-**The guard makes initialisation happen exactly once.** `/var/lib/mysql/mysql` is the system database directory, created by `mariadb-install-db`. Its presence means the volume already holds a working installation, so a restart must not touch it.
-
-<br>
-
 <details>
-<summary><b>Two failures that shaped this script</b></summary>
+<summary><b>DEEPDIVE · Two failures that shaped this script</b></summary>
 
 <br>
 
@@ -1645,24 +1657,6 @@ ready for connections
 ```
 
 </details>
-
-<br>
-
-**The last line is `exec`, and that is not cosmetic.** The script is PID 1. `exec` replaces its process image with `mariadbd` while keeping the same PID, so the daemon becomes PID 1 and receives `SIGTERM` from `docker stop` directly. Without it the script would exit and the container would stop, or bash would linger as PID 1 and swallow the signal.
-
-**There are two `exec` lines and only one ever runs:**
-
-```
-first boot                          later boots
-datadir empty                       datadir already initialised
-   ↓ guard true                        ↓ guard false
-mariadb-install-db                  (block skipped)
-write init.sql
-   ↓
-exec mariadbd --init-file=...       exec mariadbd
-   ↓                                   ↓
-PID 1, runs the SQL, then serves    PID 1, serves
-```
 
 </details>
 
@@ -1726,35 +1720,9 @@ php-fpm            executes the WordPress PHP code
 mariadb            stores the content
 ```
 
-**The container named `wordpress` is really php-fpm plus the WordPress files.** The subject spells out the separation, service by service:
+**The container named `wordpress` is really php-fpm plus the WordPress files.**
 
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> • A Docker container that contains NGINX with TLSv1.2 or TLSv1.3 only.
->
-> • A Docker container that contains WordPress + php-fpm (it must be installed and configured) only, without nginx.
->
-> • A Docker container that contains MariaDB only, without nginx.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
-**"Without nginx" appears twice on purpose.** The executor and the web server are two different jobs, so they are two different containers. The same list also fixes nginx as the only way in:
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> Your NGINX container must be the only entrypoint into your infrastructure via the port 443 only, using the TLSv1.2 or TLSv1.3 protocol.
->
-> <sub><i>the subject</i></sub>
-
-</details>
+**PHP execution and HTTP serving are separate jobs.** php-fpm executes the WordPress code; nginx handles incoming HTTPS requests.
 
 </details>
 
@@ -1919,7 +1887,7 @@ MySQL       ──acquired──►   MariaDB     (2009)
 <summary><h2>b · The WordPress container</h2></summary>
 
 
-**Three files build this service**, the same split as § 10 b:
+**Three files build this service**, the same split as § 10 c:
 
 ```
 Dockerfile              how the image is built
@@ -2014,7 +1982,7 @@ The line is commented out and the built-in default is `yes`, so php-fpm would fo
 
 <br>
 
-**`pool.d/` behaves like `mariadb.conf.d/` from § 10 b.** Every `*.conf` file in it is included, and two files can declare the same pool name. So instead of replacing the whole shipped `www.conf`, a second file can carry just the one directive that is wrong:
+**`pool.d/` behaves like `mariadb.conf.d/` from § 10 c.** Every `*.conf` file in it is included, and two files can declare the same pool name. So instead of replacing the whole shipped `www.conf`, a second file can carry just the one directive that is wrong:
 
 ```
 www.conf     [www]  user=www-data  group=www-data  pm=dynamic ...  listen=/run/php/...sock
@@ -2105,7 +2073,7 @@ wp-cli                                php CLI → WordPress code → mariadb
 
 <br>
 
-**Same reasoning as § 10 b.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
+**Same reasoning as § 10 c.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
 
 1. **Read the passwords from `/run/secrets/`.** They are files, not environment variables, so nothing in `docker inspect` or `/proc/1/environ` reveals them.
 
@@ -2132,18 +2100,7 @@ wp-cli                                php CLI → WordPress code → mariadb
 
 4. **First boot only:** `wp config create`, then `wp core install`, then `wp user create` for the second account.
 
-**Two accounts, and one of them has a naming rule:**
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> In your WordPress database, there must be two users, one of them being the administrator. The administrator's username can't contain admin/Admin or administrator/Administrator (e.g., admin, administrator, Administrator, admin-123, and so forth).
->
-> <sub><i>the subject</i></sub>
-
-</details>
+**WordPress needs two accounts, including an administrator.** The administrator's username must not contain `admin` or `administrator`, including their case variants.
 
 **"Contain" is the operative word**, so `admin-123` and `wpadmin` both fail, not only the exact word. `wp core install --admin_user=` creates the first account, `wp user create` the second.
 
@@ -2220,19 +2177,6 @@ browser ──HTTPS 443──► nginx ──┬── static files from the vol
 
 **nginx also terminates TLS.** The encrypted connection ends at nginx: it holds the certificate and the private key, decrypts the request, and everything it forwards afterwards travels as plain traffic inside the private network. WordPress and MariaDB never handle a certificate.
 
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> A Docker container that contains NGINX with TLSv1.2 or TLSv1.3 only.
->
-> Your NGINX container must be the only entrypoint into your infrastructure via the port 443 only, using the TLSv1.2 or TLSv1.3 protocol.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
 </details>
 
 <a id="b--the-configuration-files"></a>
@@ -2287,7 +2231,7 @@ conf.d/            fragments that are always on
 nginx: configuration file /etc/nginx/nginx.conf test failed
 ```
 
-**That is the opposite of `mariadb.conf.d/` and php-fpm's `pool.d/`**, § 10 b and § 11 b, where the later file quietly wins. Here two `server` blocks coexist and are chosen by address, while two identical directives in one block refuse to start.
+**That is the opposite of `mariadb.conf.d/` and php-fpm's `pool.d/`**, § 10 c and § 11 b, where the later file quietly wins. Here two `server` blocks coexist and are chosen by address, while two identical directives in one block refuse to start.
 
 </details>
 
@@ -2614,18 +2558,7 @@ nginx: configuration file /etc/nginx/nginx.conf test failed
 
 <br>
 
-**The subject fixes the name the site answers to:**
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> To make things simpler, you have to configure your domain name so it points to your local IP address. This domain name must be login.42.fr.
->
-> <sub><i>the subject</i></sub>
-
-</details>
+**This project uses `login.42.fr` as its domain name.**
 
 **No DNS server anywhere knows `login.42.fr`.** `/etc/hosts` is a plain name-to-address table the resolver consults before asking DNS, so one line is enough:
 
@@ -2659,21 +2592,6 @@ nginx container
 
 
 > **The Makefile is the only thing you need to Run. Everything else is reached through it.**
-
-**The subject fixes the chain in one direction:**
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> A Makefile is also required and must be located at the root of your directory. It must set up your entire application (i.e., it has to build the Docker images using docker-compose.yml).
->
-> You also have to write your own Dockerfiles, one per service. The Dockerfiles must be called in your docker-compose.yml by your Makefile.
->
-> <sub><i>the subject</i></sub>
-
-</details>
 
 **So `make` calls Compose, and Compose calls the Dockerfiles.** Nothing is built by hand, and no `docker build` is ever typed.
 
@@ -2722,17 +2640,6 @@ fclean   the above, plus the volumes and the host data  (down -v)
 
 > **The bonus part is five extra services, each one an additional container built from its own Dockerfile.**
 
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> The bonus part will only be assessed if the mandatory part is completed perfectly. Perfect means the mandatory part has been fully completed and functions without any malfunctions.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
 **Each bonus service is worth one point, and each one follows the same pattern already used three times:** a directory under `srcs/requirements/`, one Dockerfile on the same Debian base, a real foreground daemon as PID 1, a service in `docker-compose.yml` on the `inception` network, and a named volume only if it has state to keep.
 
 ```text
@@ -2767,18 +2674,7 @@ srcs/requirements/
 
 **The server does one thing: map a URL to a file and send it.** No interpreter runs, no database is queried, nothing is generated per request. This is the opposite of WordPress, where every `.php` request is handed to php-fpm, which executes code and builds the page.
 
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> Create a simple static website in the language of your choice except PHP (yes, PHP is excluded). For example, a showcase site or a site for presenting your resume.
->
-> <sub><i>the subject</i></sub>
-
-</details>
-
-**The exclusion of PHP is the whole constraint.** HTML and CSS satisfy it, and JavaScript does too, because JavaScript runs in the visitor's browser and not in the container. Nothing in this container executes anything.
+**The static-site bonus excludes PHP.** HTML, CSS, and browser-side JavaScript satisfy that constraint. The container serves the files.
 
 <br>
 
@@ -2942,17 +2838,6 @@ location /adminer/ {
 > **Redis is an in-memory key value data store: a server process that keeps data in RAM, addresses it by string keys, and answers over TCP on port 6379.**
 
 **It exists because RAM is orders of magnitude faster than a database query.** A SQL query has to be parsed, planned, executed against indexes, and read from disk or from the database's own buffer pool. A Redis lookup is a hash table read in a process that never touches the disk. Anything expensive to compute and cheap to lose belongs in front of the database, not in it.
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> Set up redis cache for your WordPress website in order to properly manage the cache.
->
-> <sub><i>the subject</i></sub>
-
-</details>
 
 **WordPress is exactly the workload this helps.** A single page load issues dozens of queries for the same rows: the site options, the active theme, the post objects, the user meta. With Redis in front, WordPress asks Redis first and only falls back to MariaDB on a miss, storing the answer for the next request.
 
@@ -3297,17 +3182,6 @@ Sources:
 
 
 > **netdata is a monitoring agent: it reads system metrics straight out of the kernel and serves them as a live dashboard, with no configuration, no agent to install elsewhere, and no external database.**
-
-<details>
-<summary><b>Proof from the subject</b></summary>
-
-<br>
-
-> Set up a service of your choice that you think is useful. During the defense, you will have to justify your choice.
->
-> <sub><i>the subject</i></sub>
-
-</details>
 
 **Justification for the defense, in one sentence:** the whole stack is invisible once it is running, because `docker ps` says `Up` and nothing else, so netdata answers the question that actually matters when something is slow, which is what the machine is doing with its CPU, memory, disk, and network right now.
 
