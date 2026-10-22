@@ -56,11 +56,8 @@ Since “you have to know the past to understand the present,” I included the 
 
 </details>
 
-<div>&emsp;<a href="#07--docker-compose">07 · Docker Compose</a></div>
-<br>
-
 <details>
-<summary><a href="#08--volumes">08 · Volumes</a></summary>
+<summary><a href="#07--volumes">07 · Volumes</a></summary>
 
 * a · Why containers need them
 * b · Named volumes and bind mounts
@@ -68,7 +65,10 @@ Since “you have to know the past to understand the present,” I included the 
 
 </details>
 
-<div>&emsp;<a href="#09--docker-networking">09 · Docker networking</a></div>
+<div>&emsp;<a href="#08--docker-networking">08 · Docker networking</a></div>
+<br>
+
+<div>&emsp;<a href="#09--docker-compose">09 · Docker Compose</a></div>
 <br>
 
 <details>
@@ -216,14 +216,9 @@ People started talking about Linux containers in the mid-2000s, when Google crea
 2013  Docker              initially used LXC; introduced its own libcontainer on 10 March 2014 (v0.9)
 ```
 
-**Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC (Linux Containers).
-
-Docker's founder, **Solomon Hykes**, first demonstrated it at PyCon on 15 March 2013, in a short talk titled [“The future of Linux Containers”](https://www.youtube.com/watch?v=362sHaO5eGU). His team at dotCloud already used Linux containers, but the tools were complicated and difficult for other developers to adopt.
-
-Check out [this one-minute bit about Docker's history](https://www.youtube.com/watch?v=GVVtR_hrdKI&t=966s). Just one minute, you TikTok-brained scroller. You can do this.
-
 <details>
 <summary><b>LXC DEEPDIVE</b></summary>
+
 	
 ### LXC
 
@@ -240,68 +235,41 @@ LXC combines the kernel's cgroups and support for isolated namespaces to provide
 Early versions of Docker used LXC as the container execution driver,[4] though LXC was replaced as the default in version 0.9.0[5][6] and was deprecated in 1.8.0,[7] before the driver was removed in 1.10.0.[8]
 
 [Wikipedia — LXC](https://en.wikipedia.org/wiki/LXC)
+
+[Docker — LXC vs. Docker](https://www.docker.com/blog/lxc-vs-docker/)
 </details>
 
 </details>
 
 <a id="b--namespaces-what-it-sees"></a>
 <details>
-<summary><h2>b · Namespaces </h2></summary>
+<summary><h2>b · Namespaces, what it sees</h2></summary>
 
+> **A namespace is a Linux kernel mechanism that gives a group of processes an isolated view of a system resource, such as process IDs or network interfaces.**
 
-> **A namespace is a kernel mechanism that creates an isolated instance of a system resource.**
+Processes in the same namespace share that view. Separate namespaces let containers have different process IDs, mounts, and networks while sharing the same kernel.
 
-**The kernel normally maintains system resources globally:** a single process table, network stack, mount tree, hostname, etc. A namespace creates a separate instance of one of these resources and associates it with a group of processes.
+| Namespace | What it isolates |
+|:--|:--|
+| `pid` | Process IDs and which processes are visible |
+| `net` | Network interfaces, IPs, routes, firewall rules, and ports |
+| `mnt` | Mount points |
+| `user` | User and group IDs |
+| `uts` | Hostname and NIS domain name |
+| `ipc` | Shared memory, message queues, and semaphores |
+| `cgroup` | View of the cgroup hierarchy |
+| `time` | Offsets for monotonic and boot-time clocks |
 
-**The result is isolation:** processes inside the namespace see and interact with their own instance rather than the host's global one.
+For example, one process can have two PIDs:
 
-**Why use them?**
-
-- **Isolation.** Each process gets its own view of the system and cannot access anyone else's.
-- **Security.** You can run something you don't trust. If a malicious process tries to destroy the filesystem, it destroys *its own view* of it. The host and every other process are untouched.
-- **Containers.** Docker and LXC are built out of them.
-- **Sharing, on purpose.** Namespaces can be handed out deliberately: two containers can share a network namespace, or a mount point, while staying separate everywhere else.
-
-**There are 8 types:**
-
-🖥️ **`pid`** → its own process IDs.
-&nbsp;&nbsp;&nbsp;&nbsp;PID 1 inside a container is not PID 1 on the host.
-
-🌐 **`net`** → its own interfaces, IPs, routing table, firewall rules, **ports**.
-&nbsp;&nbsp;&nbsp;&nbsp;Two containers can both listen on 9000 without colliding.
-
-📂 **`mnt`** → its own mount points and filesystem tree.
-&nbsp;&nbsp;&nbsp;&nbsp;A container's `/etc` is a different `/etc` than the host's.
-
-👤 **`user`** → its own UID / GID mapping.
-&nbsp;&nbsp;&nbsp;&nbsp;A process can be root inside while being nobody outside.
-
-🏷️ **`uts`** → its own hostname and domain name.
-&nbsp;&nbsp;&nbsp;&nbsp;The container calls itself `database`; the host never changed name.
-
-🔗 **`ipc`** → its own shared memory, message queues, semaphores.
-&nbsp;&nbsp;&nbsp;&nbsp;Nothing else can attach to its memory segments.
-
-📦 **`cgroup`** → its own view of the cgroup tree.
-&nbsp;&nbsp;&nbsp;&nbsp;It can't see where it sits in the host's hierarchy.
-
-⏰ **`time`** → its own boot and monotonic clock. *(Linux 5.6+)*
-&nbsp;&nbsp;&nbsp;&nbsp;A container reports a different boot time than the host.
-
-<br>
-
-One `sleep` command, seen from both sides at once:
-
-```
-inside container         on host
-─────────────────        ─────────────────
-PID 1  sleep 300    ═══  PID 50862  sleep 300
+```text
+Inside container          On host
+PID 1: sleep 300     =     PID 50862: sleep 300
 ```
 
-**Same process, two identities.** Inside it's process number 1, the first process in its pid namespace. Outside it's 50862, with a parent and hundreds of siblings it cannot see.
+**Same process, different views.** The host can see it; the container's PID namespace hides host processes from it.
 
-**The network namespace matters most here.** Each container gets its own interface, IP, routing table, and **its own set of ports**, which is why two containers can both listen on 9000 and never collide.
-
+Two containers with separate **network namespaces** can also listen on port `9000` without colliding.
 
 </details>
 
@@ -310,38 +278,41 @@ PID 1  sleep 300    ═══  PID 50862  sleep 300
 <summary><h2>c · Where namespaces actually live</h2></summary>
 
 
-**A namespace is not the process control block.** In Linux the PCB is `struct task_struct`: one per process, holding PID, state, memory map, open files.
-
-**Each `task_struct` carries a pointer called `nsproxy`**, pointing to the set of namespaces that process belongs to:
-
-```
-task_struct  (one per process)
-     └─ nsproxy ──> { pid_ns, net_ns, mnt_ns, uts_ns, ipc_ns, ... }
-```
+The kernel tracks each task (a process or thread) in a `task_struct`. Its **`nsproxy` pointer** leads to most of its namespace references.
 
 <p align="center"><img src="assets/task_struct-nsproxy.png" width="520"></p>
-<p align="center"><i><a href="https://github.com/torvalds/linux/blob/master/include/linux/sched.h"><code>include/linux/sched.h</code></a> · a pointer, not the namespaces themselves</i></p>
+<p align="center"><i>Linux kernel source · <a href="https://github.com/torvalds/linux/blob/master/include/linux/sched.h"><code>include/linux/sched.h</code></a></i></p>
 
-**And what it points to is just a box of pointers**, one per namespace type:
+**Notice the comment above `nsproxy`: `/* Namespaces: */`.** This is the kernel's own code.
+
+The `nsproxy` structure holds pointers to namespace objects:
 
 <p align="center"><img src="assets/struct-nsproxy.png" width="560"></p>
-<p align="center"><i><a href="https://github.com/torvalds/linux/blob/master/include/linux/nsproxy.h"><code>include/linux/nsproxy.h</code></a></i></p>
+<p align="center"><i>Linux kernel source · <a href="https://github.com/torvalds/linux/blob/master/include/linux/nsproxy.h"><code>include/linux/nsproxy.h</code></a></i></p>
 
-**`pid` is the odd one.** The field is `pid_ns_for_children`, not the process's own pid namespace. A process never changes pid namespace once it exists, so nsproxy carries the one its *children* will get. The kernel says this in the comment above the struct: the task's own is reached through `task_active_pid_ns()`.
+**Processes in the same namespace share the same kernel namespace object.**
 
-**The key word is shared**, and the kernel says so itself in that comment:
+The **user namespace** is referenced through `cred` (the task's credentials), rather than `nsproxy`:
 
-> *"The nsproxy is shared by tasks which share all namespaces. As soon as a single namespace is cloned or unshared, the nsproxy is copied."*
-
-**Every process in the same container points to the same namespace structs.** That's what makes them one container: not a flag in the PCB, but a shared set of objects.
-
-**One exception: `user` is not in nsproxy.** Look at the screenshot, there's no `user_ns` field. It lives in `struct cred`, the process's credentials, because it's about *permissions*, not resources:
-
-```
-task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for_children
+```text
+task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, ...
             ──> cred    ──> user_ns
 ```
 
+<details>
+<summary><b>DEEPDIVE</b></summary>
+
+**PID namespaces.** The field is `pid_ns_for_children`, not the process's own PID namespace. A process's own PID namespace stays fixed throughout its lifetime, so `nsproxy` holds the one future children will use. The comment above the struct explains that the task's own is accessed through `task_active_pid_ns()`.
+
+**Sharing.** The comment also explains how tasks share `nsproxy`:
+
+> "The nsproxy is shared by tasks which share all namespaces. As soon as a single namespace is cloned or unshared, the nsproxy is copied."
+
+Copying `nsproxy` does not copy every namespace object. Its pointers can still refer to namespaces shared with other tasks.
+
+**User namespaces.** There is no `user_ns` field in `nsproxy`. It lives in `struct cred`, alongside the task's user IDs, group IDs, and capabilities.
+
+</details>
 
 </details>
 
@@ -349,6 +320,11 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 <details>
 <summary><h2>d · cgroups, what it uses</h2></summary>
 
+If you've used a VM, you probably remember choosing its CPU count and RAM. **cgroups give containers similar resource controls, enforced by the host kernel.**
+
+<p align="center"><img src="assets/vm-cpu-settings.png" alt="Virtual machine settings showing the number of virtual CPUs" width="628"></p>
+
+The VM setting chooses a virtual CPU count; a cgroup CPU quota limits how much CPU time processes can use.
 
 **Namespaces hide things but restrain nothing.** A process that only sees its own filesystem can still eat every byte of RAM on the machine, exactly the hosting problem from section 01.
 
@@ -363,7 +339,7 @@ task_struct ──> nsproxy ──> uts, ipc, mnt, net, time, cgroup, pid_ns_for
 
 > ⚠️ A container capped at 64 MB still reports the host's full 15 GB when asked how much memory the machine has. The reported value comes from the host, the enforced limit is the cgroup's.
 
-> 💡 **Fun fact:** when Google started this work in 2006 it was called **"process containers"**. The name was changed to *control groups* in late 2007 to avoid confusion, because "container" already meant several different things around the kernel. It merged as **cgroups** in 2.6.24, January 2008.
+> 💡 **Fun fact:** Google added cgroups to the Linux kernel. Check [history](#a--history).
 
 
 </details>
@@ -396,7 +372,7 @@ At this point, **Linux** already gives us everything required to isolate a proce
 
 That is where Docker fits:
 
-> **Docker is a platform that makes containers easy to build, share, and run in a repeatable way.**
+> **Docker is a platform that makes containers easy to build, share, and run in a repeatable way.** That's it, it's just a tool!
 
 **In other words,** Docker manages the images, networks, volumes, ports, and lifecycle needed to run containers. **Linux still creates the isolation** through namespaces and cgroups.
 
@@ -427,28 +403,17 @@ It turns the low-level pieces of containerization into a workflow a developer ca
 > **Linux provides the container mechanism. Docker provides the tools and workflow around it.**
 
 
-<a id="deepdive--where-docker-came-from"></a>
+<a id="docker-history"></a>
 <details>
-<summary><h2>DEEPDIVE · Where Docker came from</h2></summary>
+<summary><h2>History</h2></summary>
 
+**Docker did not invent the container.** It arrived 34 years after `chroot` and 5 years after LXC (Linux Containers).
 
 **LXC could already run a container**, but you still had to assemble its filesystem by hand, choose the namespaces, wire the network, then repeat all of it on every machine. There was no way to hand someone a finished environment.
 
-> **Isolation was solved. Distribution wasn't.**
+Docker's founder, **Solomon Hykes**, first demonstrated it at PyCon on 15 March 2013, in a short talk titled [“The future of Linux Containers”](https://www.youtube.com/watch?v=362sHaO5eGU). His team at dotCloud (a platform-as-a-service company) already used Linux containers, but the tools were complicated and difficult for other developers to adopt. As Docker gained popularity, it became the company's main focus, and dotCloud renamed itself Docker Inc. in October 2013.
 
-**Solomon Hykes hit that wall at dotCloud**, a platform-as-a-service company already running customer applications in containers. Docker began as their internal tooling, and he open-sourced it in March 2013 at PyCon. dotCloud renamed itself Docker Inc. the same year.
-
-**His answer was the image:** build the environment once, ship it as one artifact. Around it came three more pieces:
-
-| | |
-|:--|:--|
-| **Images** | a packaged filesystem you build once and ship anywhere |
-| **A registry** | somewhere to publish and download them |
-| **A daemon** | a background service managing images, containers, networks, and the API |
-| **A CLI** | `docker run` instead of a page of manual setup |
-
-**Docker still wasn't touching the kernel yet.** It drove LXC until version 0.9 in March 2014, when `libcontainer`, written in Go, became the default execution driver and LXC dropped to an optional one. That component is what became `runc`.
-
+Check out [this one-minute bit about Docker's history](https://www.youtube.com/watch?v=GVVtR_hrdKI&t=966s). Just one minute, you TikTok-brained scroller. You can do this.
 
 </details>
 
@@ -996,9 +961,146 @@ Each `RUN` executes in a temporary container whose process is already root, so `
 
 </details>
 
-<a id="07--docker-compose"></a>
+<a id="07--volumes"></a>
 <details>
-<summary><h1>07 · Docker Compose</h1></summary>
+<summary><h1>07 · Volumes</h1></summary>
+
+
+<a id="a--why-containers-need-them"></a>
+<details>
+<summary><h2>a · Why containers need them</h2></summary>
+
+
+> **A volume is a directory on the host that Docker mounts into a container, so the data written there survives the container.**
+
+**A container's filesystem dies with the container.** Remove a database container and every table stored in its writable layer goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 c explains why.
+
+**Databases and uploaded media are the exception.** They are the one thing that must outlive the process that wrote them.
+
+**A volume solves that by pointing part of the container's filesystem somewhere else.** Writes to that path go through to the host disk instead of into the writable layer:
+
+```
+container                        host
+/var/lib/data    ───────────────► a real directory on the disk
+                                  survives docker rm, survives a rebuild
+```
+
+**Nothing inside the container can tell the difference.** The application opens `/var/lib/data` exactly as it would on a normal machine. The redirection happens in the mount namespace, § 02 b, before the process ever sees the path.
+
+</details>
+
+<a id="b--named-volumes-and-bind-mounts"></a>
+<details>
+<summary><h2>b · Named volumes and bind mounts</h2></summary>
+
+
+**There are two ways to say "mount something from the host", and Docker treats them differently:**
+
+```yaml
+volumes:
+  - /srv/app-data:/var/lib/data   ← bind mount
+  - app_data:/var/lib/data        ← named volume
+```
+
+| | Named volume | Bind mount |
+|:--|:--|:--|
+| **who chooses the host path** | Docker | you |
+| **default location** | `/var/lib/docker/volumes/<name>/_data` | wherever you point it |
+| **listed by `docker volume ls`** | yes | no |
+| **exists as an object** | yes, with a name and a driver | no, it is only a path |
+| **copy-up on first mount** | yes | no |
+
+**A named volume can be inspected to find its Docker-managed location:**
+
+```
+$ docker volume create probe_tmp && docker volume inspect probe_tmp
+/var/lib/docker/volumes/probe_tmp/_data | driver=local
+```
+
+**Copy-up is a key behavioural difference.** Mounting an *empty* named volume over a directory that already contains files in the image copies those files into the volume. A bind mount never does this; it simply hides whatever was underneath.
+
+</details>
+
+<a id="c--custom-host-paths-with-driver_opts"></a>
+<details>
+<summary><h2>c · Custom host paths with <code>driver_opts</code></h2></summary>
+
+
+**A named volume normally uses a path chosen by Docker.** When a specific host directory is required, `driver_opts` can pass bind-mount options to the `local` volume driver:
+
+```yaml
+volumes:
+  app_data:
+    driver_opts:
+      type: none                  # no filesystem to create; pass through
+      o: bind                     # mount it as a bind
+      device: /srv/app-data       # host directory to use
+```
+
+**It is still a named volume.** `docker volume ls` lists it, `docker volume rm` removes it, and copy-up still applies. Only the location changed.
+
+**The directory must already exist.** `type: none` creates nothing. Otherwise the mount fails:
+
+```
+failed to mount local volume:
+  mount /srv/does-not-exist:/var/lib/docker/volumes/..._data
+  no such file or directory
+```
+
+The container never starts, and the directory is still missing afterwards. Create the host directory before running `docker compose up`.
+
+**Use one device per volume.** Two volumes pointing at the same `device` are two Docker names for one host directory, so unrelated application data becomes mixed together.
+
+</details>
+
+</details>
+
+<a id="08--docker-networking"></a>
+<details>
+<summary><h1>08 · Docker networking</h1></summary>
+
+> **Docker networking determines how containers communicate. Docker can create virtual networks that act like virtual switches. Containers attached to the same network can communicate with each other.**
+
+<br>
+
+```text
+             Docker bridge network
+              ┌───────────────┐
+              │ Virtual switch│
+              └───┬────┬────┬─┘
+                  │    │    │
+                web  API  database
+```
+
+<br>
+
+**The three modes:**
+
+```text
+BRIDGE
+Container ── Docker virtual network ── Other containers
+                         │
+                         └── Host/NAT ── Internet
+
+
+HOST
+Container ───────────── Host network
+        (no separate network isolation)
+
+
+NONE
+Container
+   │
+   └── No network
+```
+
+**A user-defined bridge network also provides DNS.** Containers can reach one another using their service or container names instead of tracking changing IP addresses.
+
+</details>
+
+<a id="09--docker-compose"></a>
+<details>
+<summary><h1>09 · Docker Compose</h1></summary>
 
 
 > **Docker Compose is a tool for defining and running multi-container applications.**
@@ -1224,143 +1326,6 @@ docker compose    V2 onward, Go, a plugin of the docker CLI
 **Use the space form in current documentation.** The hyphenated command may not exist on a modern installation, and tutorials that still use it often also carry the obsolete `version:` line.
 
 </details>
-
-</details>
-
-<a id="08--volumes"></a>
-<details>
-<summary><h1>08 · Volumes</h1></summary>
-
-
-<a id="a--why-containers-need-them"></a>
-<details>
-<summary><h2>a · Why containers need them</h2></summary>
-
-
-> **A volume is a directory on the host that Docker mounts into a container, so the data written there survives the container.**
-
-**A container's filesystem dies with the container.** Remove a database container and every table stored in its writable layer goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 c explains why.
-
-**Databases and uploaded media are the exception.** They are the one thing that must outlive the process that wrote them.
-
-**A volume solves that by pointing part of the container's filesystem somewhere else.** Writes to that path go through to the host disk instead of into the writable layer:
-
-```
-container                        host
-/var/lib/data    ───────────────► a real directory on the disk
-                                  survives docker rm, survives a rebuild
-```
-
-**Nothing inside the container can tell the difference.** The application opens `/var/lib/data` exactly as it would on a normal machine. The redirection happens in the mount namespace, § 02 b, before the process ever sees the path.
-
-</details>
-
-<a id="b--named-volumes-and-bind-mounts"></a>
-<details>
-<summary><h2>b · Named volumes and bind mounts</h2></summary>
-
-
-**There are two ways to say "mount something from the host", and Docker treats them differently:**
-
-```yaml
-volumes:
-  - /srv/app-data:/var/lib/data   ← bind mount
-  - app_data:/var/lib/data        ← named volume
-```
-
-| | Named volume | Bind mount |
-|:--|:--|:--|
-| **who chooses the host path** | Docker | you |
-| **default location** | `/var/lib/docker/volumes/<name>/_data` | wherever you point it |
-| **listed by `docker volume ls`** | yes | no |
-| **exists as an object** | yes, with a name and a driver | no, it is only a path |
-| **copy-up on first mount** | yes | no |
-
-**A named volume can be inspected to find its Docker-managed location:**
-
-```
-$ docker volume create probe_tmp && docker volume inspect probe_tmp
-/var/lib/docker/volumes/probe_tmp/_data | driver=local
-```
-
-**Copy-up is a key behavioural difference.** Mounting an *empty* named volume over a directory that already contains files in the image copies those files into the volume. A bind mount never does this; it simply hides whatever was underneath.
-
-</details>
-
-<a id="c--custom-host-paths-with-driver_opts"></a>
-<details>
-<summary><h2>c · Custom host paths with <code>driver_opts</code></h2></summary>
-
-
-**A named volume normally uses a path chosen by Docker.** When a specific host directory is required, `driver_opts` can pass bind-mount options to the `local` volume driver:
-
-```yaml
-volumes:
-  app_data:
-    driver_opts:
-      type: none                  # no filesystem to create; pass through
-      o: bind                     # mount it as a bind
-      device: /srv/app-data       # host directory to use
-```
-
-**It is still a named volume.** `docker volume ls` lists it, `docker volume rm` removes it, and copy-up still applies. Only the location changed.
-
-**The directory must already exist.** `type: none` creates nothing. Otherwise the mount fails:
-
-```
-failed to mount local volume:
-  mount /srv/does-not-exist:/var/lib/docker/volumes/..._data
-  no such file or directory
-```
-
-The container never starts, and the directory is still missing afterwards. Create the host directory before running `docker compose up`.
-
-**Use one device per volume.** Two volumes pointing at the same `device` are two Docker names for one host directory, so unrelated application data becomes mixed together.
-
-</details>
-
-</details>
-
-<a id="09--docker-networking"></a>
-<details>
-<summary><h1>09 · Docker networking</h1></summary>
-
-> **Docker networking determines how containers communicate. Docker can create virtual networks that act like virtual switches. Containers attached to the same network can communicate with each other.**
-
-<br>
-
-```text
-             Docker bridge network
-              ┌───────────────┐
-              │ Virtual switch│
-              └───┬────┬────┬─┘
-                  │    │    │
-                web  API  database
-```
-
-<br>
-
-**The three modes:**
-
-```text
-BRIDGE
-Container ── Docker virtual network ── Other containers
-                         │
-                         └── Host/NAT ── Internet
-
-
-HOST
-Container ───────────── Host network
-        (no separate network isolation)
-
-
-NONE
-Container
-   │
-   └── No network
-```
-
-**A user-defined bridge network also provides DNS.** Containers can reach one another using their service or container names instead of tracking changing IP addresses.
 
 </details>
 
@@ -1913,7 +1878,7 @@ php-fpm master        reads config, spawns and reaps workers, holds the socket
 
 **The master never executes PHP.** It supervises. That division is what lets a worker crash on a fatal error without taking the service down, and it is why php-fpm is the process that belongs at PID 1.
 
-**Debian's defaults for both of those do not suit a container.** § 09 b covers what has to change and why.
+**Debian's defaults for both of those do not suit a container.** § 11 b covers what has to change and why.
 
 </details>
 
@@ -1944,7 +1909,7 @@ MySQL       ──acquired──►   MariaDB     (2009)
 <summary><h2>b · The WordPress container</h2></summary>
 
 
-**Three files build this service**, the same split as § 08 b:
+**Three files build this service**, the same split as § 10 b:
 
 ```
 Dockerfile              how the image is built
@@ -1959,7 +1924,7 @@ tools/entrypoint.sh     what happens on every container start
 
 <br>
 
-**§ 09 a has the request path, browser to nginx to php-fpm to mariadb.** The dependency runs one way only: php-fpm binds 9000 and waits whether or not nginx exists, mariadb binds 3306 and waits whether or not wordpress exists. Nothing calls back upward.
+**§ 11 a has the request path, browser to nginx to php-fpm to mariadb.** The dependency runs one way only: php-fpm binds 9000 and waits whether or not nginx exists, mariadb binds 3306 and waits whether or not wordpress exists. Nothing calls back upward.
 
 **What that diagram leaves out is a filesystem shared between two containers:**
 
@@ -2039,7 +2004,7 @@ The line is commented out and the built-in default is `yes`, so php-fpm would fo
 
 <br>
 
-**`pool.d/` behaves like `mariadb.conf.d/` from § 08 b.** Every `*.conf` file in it is included, and two files can declare the same pool name. So instead of replacing the whole shipped `www.conf`, a second file can carry just the one directive that is wrong:
+**`pool.d/` behaves like `mariadb.conf.d/` from § 10 b.** Every `*.conf` file in it is included, and two files can declare the same pool name. So instead of replacing the whole shipped `www.conf`, a second file can carry just the one directive that is wrong:
 
 ```
 www.conf     [www]  user=www-data  group=www-data  pm=dynamic ...  listen=/run/php/...sock
@@ -2130,7 +2095,7 @@ wp-cli                                php CLI → WordPress code → mariadb
 
 <br>
 
-**Same reasoning as § 08 b.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
+**Same reasoning as § 10 b.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
 
 1. **Read the passwords from `/run/secrets/`.** They are files, not environment variables, so nothing in `docker inspect` or `/proc/1/environ` reveals them.
 
@@ -2229,7 +2194,7 @@ GET /index.php   ──►  nginx cannot execute PHP
                       forwards to php-fpm            ──►  200 + generated HTML
 ```
 
-**The second case is why the WordPress container exists.** As § 09 says, php-fpm executes PHP but does not speak HTTP, and nginx speaks HTTP but cannot execute PHP. Neither is a complete website on its own.
+**The second case is why the WordPress container exists.** As § 11 says, php-fpm executes PHP but does not speak HTTP, and nginx speaks HTTP but cannot execute PHP. Neither is a complete website on its own.
 
 <br>
 
@@ -2312,7 +2277,7 @@ conf.d/            fragments that are always on
 nginx: configuration file /etc/nginx/nginx.conf test failed
 ```
 
-**That is the opposite of `mariadb.conf.d/` and php-fpm's `pool.d/`**, § 08 b and § 09 b, where the later file quietly wins. Here two `server` blocks coexist and are chosen by address, while two identical directives in one block refuse to start.
+**That is the opposite of `mariadb.conf.d/` and php-fpm's `pool.d/`**, § 10 b and § 11 b, where the later file quietly wins. Here two `server` blocks coexist and are chosen by address, while two identical directives in one block refuse to start.
 
 </details>
 
@@ -2528,7 +2493,7 @@ ENTRYPOINT ["nginx", "-g", "daemon off;"]
 
 **`openssl` is not in the base image.** Measured on `debian:bookworm`: no `openssl` binary and no such package installed, only the `libssl3` library. It has to be installed alongside nginx.
 
-**`rm /etc/nginx/sites-enabled/default` removes the packaged site**, which owns port 80 as its default server, as § 10 b explains. Deleting one symlink is preferable to editing the packaged `nginx.conf`, and it belongs in the same `RUN` for the whiteout reason in § 06 c.
+**`rm /etc/nginx/sites-enabled/default` removes the packaged site**, which owns port 80 as its default server, as § 12 b explains. Deleting one symlink is preferable to editing the packaged `nginx.conf`, and it belongs in the same `RUN` for the whiteout reason in § 06 c.
 
 **The `COPY` comes last on purpose.** `default.conf` is the file that gets edited over and over, and every edit invalidates the cache for everything below it. Placed above the certificate `RUN`, each edit would regenerate a fresh key pair. Whatever changes most often goes last.
 
@@ -2584,7 +2549,7 @@ server {
         PEM_read_bio_X509_AUX() failed ... Expecting: TRUSTED CERTIFICATE
 ```
 
-**`include snippets/fastcgi-php.conf;` ships with the Debian package**, and it is what supplies the FastCGI parameters § 09 a describes:
+**`include snippets/fastcgi-php.conf;` ships with the Debian package**, and it is what supplies the FastCGI parameters § 11 a describes:
 
 ```
 fastcgi_split_path_info ^(.+?\.php)(/.*)$;
@@ -2619,7 +2584,7 @@ nginx:
 
 **`ports:` appears exactly once in the whole file.** That single mapping is what makes nginx the only entrypoint. mariadb's 3306 and php-fpm's 9000 are bound inside their own network namespaces and reachable only from the `inception` network.
 
-**The volume is mounted a second time here**, the same named volume wordpress uses. § 09 b explains why: FastCGI sends a path, not code, so both containers must see the same files at the same path.
+**The volume is mounted a second time here**, the same named volume wordpress uses. § 11 b explains why: FastCGI sends a path, not code, so both containers must see the same files at the same path.
 
 **`depends_on` is not optional for nginx**, and the reason is different from wordpress's. nginx resolves `fastcgi_pass wordpress:9000` while parsing its configuration, at startup, not per request. If the wordpress container does not exist yet, the name does not resolve and nginx refuses to start:
 
@@ -2704,7 +2669,7 @@ nginx container
 
 <br>
 
-**There is one thing Compose cannot do for itself, and it is the reason `up` has a prerequisite.** As § 11 c shows, `type: none` creates no directory: if `/home/login/data/mariadb` is missing, the volume fails to mount and the container never starts. The Makefile has to create both directories first.
+**There is one thing Compose cannot do for itself, and it is the reason `up` has a prerequisite.** As § 07 c shows, `type: none` creates no directory: if `/home/login/data/mariadb` is missing, the volume fails to mount and the container never starts. The Makefile has to create both directories first.
 
 ```make
 COMPOSE		= docker compose -f srcs/docker-compose.yml
@@ -2776,7 +2741,7 @@ srcs/requirements/
 | Container | Time | What makes it that |
 |:--|:--|:--|
 | **static site** | 30 to 60 min | one nginx, or any non-PHP server, on its own port. A few HTML and CSS files, no state, no secrets |
-| **adminer** | 1 to 2 h | one PHP file to download, and the php-fpm knowledge from § 09 reused as is. The only new decision is whether it gets its own nginx or a `location` in the existing one |
+| **adminer** | 1 to 2 h | one PHP file to download, and the php-fpm knowledge from § 11 reused as is. The only new decision is whether it gets its own nginx or a `location` in the existing one |
 | **redis** | 2 to 3 h | `redis-server` in the foreground is trivial. The work is on the WordPress side, installing and configuring the object cache plugin so it actually connects |
 | **free choice** | varies | cheapest is a small monitoring or exporter service. Whatever it is, it has to be justified in one sentence at the defense |
 
@@ -2936,7 +2901,7 @@ server {
 
 **It exists to replace a terminal client.** Instead of `mariadb -u wp_user -p` and typing SQL, the browser shows the databases, the tables, the rows, and lets them be edited. For this project it is a way to inspect the WordPress database.
 
-**Adminer is PHP, and that decides the architecture of the container.** PHP is not a server: something has to receive the HTTP request, and something has to execute the code. Those are two different programs, exactly as in § 09:
+**Adminer is PHP, and that decides the architecture of the container.** PHP is not a server: something has to receive the HTTP request, and something has to execute the code. Those are two different programs, exactly as in § 11:
 
 ```text
 browser --HTTP--> web server --FastCGI--> php-fpm --> adminer.php --> mariadb
@@ -3556,3 +3521,7 @@ https://mlops-for-all.github.io/en/docs/prerequisites/docker/
 [dotScale 2013 — Solomon Hykes — Why we built Docker](https://www.youtube.com/watch?v=3N3n9FzebAA&t=1054s)
 
 [Linux Containers — Official website](https://linuxcontainers.org/)
+
+[Evolution of Linux Containers — Tilak Patidar](https://medium.com/@tilakpatidar/evolution-of-linux-containers-660fcfdefa3e)
+
+[Docker — LXC vs. Docker](https://www.docker.com/blog/lxc-vs-docker/)
