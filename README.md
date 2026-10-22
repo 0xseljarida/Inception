@@ -2,7 +2,7 @@
 
 <p align="center"><img src="assets/containers_kernel.png" alt="Container ship labeled Linux kernel" width="600"></p>
 
-Since “you have to know the past to understand the present,” I included the history behind these technologies (containers, Docker, MariaDB...). Reading it is optional, but it will help make things suckless.
+Since “you have to know the past to understand the present”, I included the history behind these technologies (containers, Docker, MariaDB...). Reading it is optional, but it will help make things suckless.
 
 ## Index
 
@@ -67,8 +67,16 @@ Since “you have to know the past to understand the present,” I included the 
 <div>&emsp;<a href="#08--docker-networking">08 · Docker networking</a></div>
 <br>
 
-<div>&emsp;<a href="#09--docker-compose">09 · Docker Compose</a></div>
-<br>
+<details>
+<summary><a href="#09--docker-compose">09 · Docker Compose</a></summary>
+
+* a · Why Compose?
+* b · YAML
+* c · How to write a Compose file
+* d · Important keys
+* e · Essential commands
+
+</details>
 
 <details>
 <summary><a href="#10--mariadb">10 · MariaDB</a></summary>
@@ -865,27 +873,23 @@ Access to a rootful Docker daemon's API can grant host-level privileges; see § 
 <details>
 <summary><h1>07 · Volumes</h1></summary>
 
+> **A volume is persistent storage managed by Docker. Mount it into a container to keep data after the container is removed.**
+
+<p align="center"><img src="assets/docker-volumes.png" alt="A container mounts a Docker volume stored on the host; the data remains after the container is removed" width="800"></p>
+
+[Docker: Volumes](https://docs.docker.com/engine/storage/volumes/)
 
 <a id="a--why-containers-need-them"></a>
 <details>
 <summary><h2>a · Why containers need them</h2></summary>
 
+**Stopping or restarting a container keeps its writable layer. Removing the container deletes it.** A database stored only in that layer disappears with it; see [image layers](#b--image-layers).
 
-> **A volume is a directory on the host that Docker mounts into a container, so the data written there survives the container.**
+**Mount a volume at `/var/lib/data`**, and files written there go to the volume instead. A replacement container can mount the same volume and use the same files.
 
-**A container's filesystem dies with the container.** Remove a database container and every table stored in its writable layer goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 b explains why.
+The application uses the mounted path like an ordinary directory. Use volumes for data such as databases and uploaded media.
 
-**Databases and uploaded media are the exception.** They are the one thing that must outlive the process that wrote them.
-
-**A volume solves that by pointing part of the container's filesystem somewhere else.** Writes to that path go through to the host disk instead of into the writable layer:
-
-```
-container                        host
-/var/lib/data    ───────────────► a real directory on the disk
-                                  survives docker rm, survives a rebuild
-```
-
-**Nothing inside the container can tell the difference.** The application opens `/var/lib/data` exactly as it would on a normal machine. The redirection happens in the mount namespace, § 02 b, before the process ever sees the path.
+[Docker: Storage](https://docs.docker.com/engine/storage/)
 
 </details>
 
@@ -893,31 +897,50 @@ container                        host
 <details>
 <summary><h2>b · Named volumes and bind mounts</h2></summary>
 
-
-**There are two ways to say "mount something from the host", and Docker treats them differently:**
+**Choose one mount inside a Compose service:**
 
 ```yaml
+# Named volume: Docker manages the storage
 volumes:
-  - /srv/app-data:/var/lib/data   ← bind mount
-  - app_data:/var/lib/data        ← named volume
+  - app_data:/var/lib/data
+```
+
+Declare `app_data` under the top-level `volumes:` as well.
+
+Or use a host path directly:
+
+```yaml
+# Bind mount: you choose the host path
+volumes:
+  - /srv/app-data:/var/lib/data
 ```
 
 | | Named volume | Bind mount |
 |:--|:--|:--|
-| **who chooses the host path** | Docker | you |
-| **default location** | `/var/lib/docker/volumes/<name>/_data` | wherever you point it |
+| **who chooses the host path by default** | Docker | you |
+| **typical location on Linux** | `/var/lib/docker/volumes/<name>/_data` | wherever you point it |
 | **listed by `docker volume ls`** | yes | no |
-| **exists as an object** | yes, with a name and a driver | no, it is only a path |
-| **copy-up on first mount** | yes | no |
+| **copies existing container files** | into an empty volume, by default | no |
 
-**A named volume can be inspected to find its Docker-managed location:**
+**When an empty volume is mounted over existing container files, Docker copies them into the volume by default.** Copying can be disabled. A bind mount hides existing files without copying them.
 
-```
-$ docker volume create probe_tmp && docker volume inspect probe_tmp
+[Docker: Mounting a volume over existing data](https://docs.docker.com/engine/storage/volumes/#mounting-a-volume-over-existing-data)
+
+<details>
+<summary><b>DEEPDIVE · Inspecting a volume</b></summary>
+
+`docker volume inspect` returns JSON. Use `--format` to show only its mount point and driver:
+
+```console
+$ docker volume create probe_tmp
+probe_tmp
+$ docker volume inspect --format '{{ .Mountpoint }} | driver={{ .Driver }}' probe_tmp
 /var/lib/docker/volumes/probe_tmp/_data | driver=local
 ```
 
-**Copy-up is a key behavioural difference.** Mounting an *empty* named volume over a directory that already contains files in the image copies those files into the volume. A bind mount never does this; it simply hides whatever was underneath.
+The path is on the Docker host and may differ from this Linux example.
+
+</details>
 
 </details>
 
@@ -925,31 +948,38 @@ $ docker volume create probe_tmp && docker volume inspect probe_tmp
 <details>
 <summary><h2>c · Custom host paths with <code>driver_opts</code></h2></summary>
 
-
-**A named volume normally uses a path chosen by Docker.** When a specific host directory is required, `driver_opts` can pass bind-mount options to the `local` volume driver:
+**Use the `local` driver's bind options to give a named volume a specific host directory:**
 
 ```yaml
 volumes:
   app_data:
+    driver: local
     driver_opts:
-      type: none                  # no filesystem to create; pass through
-      o: bind                     # mount it as a bind
-      device: /srv/app-data       # host directory to use
+      type: none
+      o: bind
+      device: /srv/app-data       # existing host directory
 ```
 
-**It is still a named volume.** `docker volume ls` lists it, `docker volume rm` removes it, and copy-up still applies. Only the location changed.
+**It is still a named volume**, backed by `/srv/app-data`. Docker lists and manages it as a volume, and empty-volume copying still applies.
 
-**The directory must already exist.** `type: none` creates nothing. Otherwise the mount fails:
+**Create the host directory before running `docker compose up`.** Use a separate directory for each application's data: two volumes with the same `device` share the same files.
 
-```
+[Docker: Volume driver options](https://docs.docker.com/reference/compose-file/volumes/#driver_opts)
+
+<details>
+<summary><b>DEEPDIVE · Missing host directories</b></summary>
+
+If the source directory does not exist, the mount fails:
+
+```text
 failed to mount local volume:
   mount /srv/does-not-exist:/var/lib/docker/volumes/..._data
   no such file or directory
 ```
 
-The container never starts, and the directory is still missing afterwards. Create the host directory before running `docker compose up`.
+The container does not start. Docker does not create the source directory for this kind of mount.
 
-**Use one device per volume.** Two volumes pointing at the same `device` are two Docker names for one host directory, so unrelated application data becomes mixed together.
+</details>
 
 </details>
 
@@ -964,17 +994,17 @@ The container never starts, and the directory is still missing afterwards. Creat
 <br>
 
 ```text
-             Docker bridge network
-              ┌───────────────┐
-              │ Virtual switch│
-              └───┬────┬────┬─┘
-                  │    │    │
-                web  API  database
+       Docker bridge network
+    ┌─────────────────────────┐
+    │      Virtual switch     │
+    └────┬───────┬───────┬────┘
+         │       │       │
+        web     API   database
 ```
 
 <br>
 
-**The three modes:**
+**Three common modes:**
 
 ```text
 BRIDGE
@@ -991,10 +1021,23 @@ Container ───────────── Host network
 NONE
 Container
    │
-   └── No network
+   └── Loopback only
 ```
 
 **A user-defined bridge network also provides DNS.** Containers can reach one another using their service or container names instead of tracking changing IP addresses.
+
+<details>
+<summary><b>DEEPDIVE · The Linux bridge</b></summary>
+
+<p align="center"><img src="assets/bridge.png" alt="Container interfaces connected through veth pairs to the host's docker0 bridge, with traffic routed toward the internet" width="900"></p>
+
+This diagram shows Docker's **default bridge**, `docker0`. Each container has one end of a `veth` pair; the other end connects to the bridge on the host. Think of the pair as a virtual Ethernet cable.
+
+For external traffic, the host routes packets and normally applies NAT. User-defined bridge networks use their own bridges instead of `docker0`. The addresses shown are examples.
+
+[Docker: Bridge networks](https://docs.docker.com/engine/network/drivers/bridge/) · [Linux: veth](https://man7.org/linux/man-pages/man4/veth.4.html)
+
+</details>
 
 </details>
 
@@ -1002,228 +1045,295 @@ Container
 <details>
 <summary><h1>09 · Docker Compose</h1></summary>
 
-
 > **Docker Compose is a tool for defining and running multi-container applications.**
->
-> <sub><i><a href="https://docs.docker.com/compose/">Docker's own definition</a></i></sub>
 
-**A Dockerfile builds one image. Nothing in it describes a stack.** It cannot say which containers exist together, which network they share, which volumes persist, or what starts before what. Those are relationships *between* containers, and there is nowhere in a Dockerfile to write them down.
+<p align="center"><img src="assets/docker-compose.png" alt="Compose reads a YAML file and uses Docker Engine to run services with shared networks and persistent volumes" width="900"></p>
 
-**That gap is what Compose fills:** *"it simplifies the control of your entire application stack, making it easy to manage services, networks, and volumes in a single YAML configuration file."* One file describes the whole system, and *"with a single command, you create and start all the services from your configuration file."*
+**A Dockerfile builds an image. A Compose file describes how services run together**, including their networks, storage, and configuration. A service defines how to run one or more containers from an image.
 
-```
-Dockerfile    how ONE image is built
-compose.yaml  how ALL the containers run together
-```
+[Docker: Compose](https://docs.docker.com/compose/)
 
-<br>
-
+<a id="a--why-compose"></a>
 <details>
-<summary><b>What it replaces</b></summary>
+<summary><h2>a · Why Compose?</h2></summary>
 
-<br>
+Starting one container might look like this:
 
-**Without Compose, a multi-container application becomes a collection of long commands that must be repeated in the right order:**
+```bash
+docker run -d --name database -p 1337:3306 --env-file .env my-database:1.0
+```
+
+Now add a web server and an application. Each needs its own settings, the right volumes, a shared network, and a startup order. With the images already built, it starts looking like this: **don't read it juts look at it, i know it's too much**
 
 ```bash
 docker network create app_net
 docker volume create app_data
-docker run -d --name database \
-    --network app_net \
-    --env-file .env \
-    -v app_data:/var/lib/database \
-    --restart unless-stopped \
-    example/database
+
+docker run -d --name database --network app_net --env-file .env \
+  -v app_data:/var/lib/database --restart unless-stopped my-database:1.0
+
+docker run -d --name app --network app_net --env-file .env \
+  --restart unless-stopped my-app:1.0
+
+docker run -d --name web --network app_net -p 8080:80 \
+  --restart unless-stopped my-web:1.0
 ```
 
-**Every flag is a fact that lives nowhere.** It exists in your shell history and has to be retyped identically on the next machine.
+**That's too much to keep retyping.** As we said, Docker is trying to make things simple.
+
+**Compose puts that setup in one YAML file.** Then:
+
+```bash
+docker compose up
+```
+
+Compose reads the file and sends requests to the Docker Engine API to create networks and volumes, mount data, and start the containers. The Engine performs those operations.
+
+[Docker: How Compose works](https://docs.docker.com/compose/intro/compose-application-model/)
+
+</details>
+
+<a id="b--yaml"></a>
+<details>
+<summary><h2>b · YAML</h2></summary>
+
+**YAML is a human-readable data serialization language**, often used for configuration files. It represents data as values, lists, and mappings (dictionaries).
+
+The name originally meant [“Yet Another Markup Language”](https://yaml.org/spec/history/2001-06-16.html). Today it means **“YAML Ain't Markup Language”**. The “Y” stands for YAML. Yes, it's a recursive joke, (GNU aah name).
+
+**Rule #1: NEVER use tabs for indentation.** Use spaces, consistently. Two spaces per level works well.
+
+**Key-value pairs:** write `key: value`, with a space after the colon.
+
+```yaml
+image: nginx
+container_name: web_server
+restart: unless-stopped
+```
+
+**Lists:** each `- ` introduces an item. Quote port mappings so they stay strings.
+
+```yaml
+ports:
+  - "80:80"
+  - "443:443"
+```
+
+**Nested mappings:** indentation groups properties under a key.
+
+```yaml
+nginx:
+  build: ./nginx
+  container_name: web_server
+  expose:
+    - "443"
+```
+
+Here, `build`, `container_name`, and `expose` belong to `nginx`. Entries at the same indentation level are siblings. `#` starts a comment.
+
+YAML also supports inline lists, such as `networks: [app_net]`, and empty mappings, `{}`. **YAML supplies the structure; Compose gives keys such as `image` and `ports` their meaning.**
+
+[YAML: Specification](https://yaml.org/spec/1.2.2/)
+
+</details>
+
+<a id="c--how-to-write-a-compose-file"></a>
+<details>
+<summary><h2>c · How to write a Compose file</h2></summary>
+
+Create a file named `compose.yaml`. **Start with `services:`**, then give each service a name and its settings:
 
 ```yaml
 services:
-  database:
-    image: example/database
-    networks: [app_net]
-    env_file: [.env]
-    volumes:
-      - app_data:/var/lib/database
-    restart: unless-stopped
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
 ```
 
-**The deeper change is declarative instead of imperative.** `docker run` is an instruction: *do this now*. A Compose file is a description: *this is what should exist*. Compose compares that description against what is actually running and makes up the difference, which is why `docker compose up` on an already-running stack does nothing instead of failing or duplicating.
+Read it from the outside in:
 
-</details>
+- **`services:`** groups the services to run.
+- **`web:`** is a service name you choose.
+- **`image: nginx`** selects the image to run.
+- **`"8080:80"`** maps port 8080 on your host to port 80 inside the container.
 
-<br>
+That's enough for a web server. Run `docker compose up`, then open `http://localhost:8080`.
+
+**Using your own Dockerfile?** Replace `image: nginx` with `build: ./web`, where `web/Dockerfile` contains the build instructions. Keep the port mapping if your application listens on port 80.
+
+**Adding another service?** Put it under `services:`, at the same indentation level as `web:`. Compose creates a shared network automatically, so services can reach one another by name. Add volumes, secrets, and other settings when you need them.
 
 <details>
-<summary><b>Four core top-level elements</b></summary>
+<summary><b>DEEPDIVE · Multiple services and shared resources</b></summary>
 
-<br>
-
-**A typical Compose file is organized around four core keys**, each mapping to Docker objects or data used by services:
+This example assumes a `Dockerfile` in each of `web/` and `database/`, a `.env` file for database settings, and `secrets/db_password.txt` for its password. Save the YAML as `compose.yaml` beside those paths:
 
 ```yaml
-services:   the containers, one block each
-networks:   the networks they are attached to
-volumes:    the named volumes that outlive them
-secrets:    files mounted read-only at /run/secrets/
+services:
+  web:
+    build: ./web
+    image: my-web:1.0
+    ports:
+      - "8080:80"
+    networks: [app_net]
+    depends_on: [database]
+    restart: unless-stopped
+
+  database:
+    build: ./database
+    image: my-database:1.0
+    env_file: [.env]
+    networks: [app_net]
+    volumes:
+      - app_data:/var/lib/database
+    secrets: [db_password]
+    restart: unless-stopped
+
+networks:
+  app_net: {}
+
+volumes:
+  app_data: {}
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
 ```
 
-**`services:` is the only mandatory one.** The other three declare named resources or data. A service attaches a named volume, network, or secret by listing it in its own configuration; in particular, a secret is not available to a service unless explicitly granted.
+**Top-level blocks declare resources; service entries attach them.** `app_data` is declared once and mounted into `database`. The password file is available only to `database`, at `/run/secrets/db_password` by default; its application must read that file.
 
-**Everything else nests inside a service:** `build`, `image`, `env_file`, `depends_on`, `restart`, `ports`. Those are per-container settings, so they have no meaning at the top level.
+`app_net: {}` and `app_data: {}` use the default settings. Both services join `app_net`, so `web` can reach the database by its service name, `database`. `"8080:80"` publishes the web container's port 80 on the host's port 8080.
+
+**The short form of `depends_on` controls startup order, not readiness.** Here, `database` starts before `web`, but it may not yet accept connections. Use a `healthcheck` with `condition: service_healthy`, or application retries, when readiness matters.
+
+If `database` defines a healthcheck, the dependency can be written as:
+
+```yaml
+depends_on:
+  database:
+    condition: service_healthy
+```
+
+[Docker: Startup order](https://docs.docker.com/compose/how-tos/startup-order/)
 
 </details>
 
-<br>
+</details>
 
+<a id="d--important-compose-keys"></a>
 <details>
-<summary><b>The keys, and what each one does</b></summary>
+<summary><h2>d · Important keys</h2></summary>
 
-<br>
+At the top level, **`services`** defines the application's services. **`networks`**, **`volumes`**, and **`secrets`** declare resources those services can use.
 
-**A Dockerfile is a flat list of instructions. A Compose file is two levels**, and that split is the part worth getting straight first:
+Inside a service:
 
-```text
-compose.yaml
-│
-├── services:          what to run
-│   ├── database:      service name, also its DNS hostname
-│   │   └── build, volumes, networks, secrets, env_file, restart ...
-│   └── web:
-│
-├── networks:          resources the services reference by name
-├── volumes:
-└── secrets:
-```
-
-**A top-level block declares a resource. A key inside a service attaches it.** `volumes:` at the top level creates a volume, `volumes:` inside a service mounts it. Same word, two different jobs.
-
-| Top-level element | Role |
+| Key | Purpose |
 |:--|:--|
-| `services` | the containers to run. Each key under it is a service name, and Compose's DNS resolves that name, not `container_name` |
-| `networks` | *"lets you configure named networks that can be reused across multiple services"* |
-| `volumes` | *"lets you configure named volumes that can be reused across multiple services"* |
-| `secrets` | *"defines or references sensitive data that is granted to the services"* |
-
-| Service-level key | Role |
-|:--|:--|
-| `build` | build configuration for creating an image from source. Points at the directory holding the Dockerfile |
-| `image` | the image to start the container from. Together with `build`, it names the image Compose produces |
-| `container_name` | a custom container name instead of the generated one. Not used for DNS |
-| `depends_on` | controls startup and shutdown order. `service_started` only waits for the process to exist, `service_healthy` waits for a passing `healthcheck` |
-| `environment` | environment variables set in the container, as an array or a map |
-| `env_file` | one or more files containing environment variables to pass to the container |
-| `networks` | the networks this container attaches to, referencing entries under the top-level `networks` |
-| `volumes` | mounts host paths or named volumes into the container |
-| `secrets` | grants access to secrets defined at top level. Each one lands at `/run/secrets/<name>` |
-| `ports` | publishes a container port on the host |
-| `expose` | records a port as reachable from other containers. Documentation only, like Dockerfile `EXPOSE` |
-| `restart` | the policy applied on container termination: `no`, `always`, `on-failure`, `unless-stopped` |
+| `build` | configures how to build the image; a short path selects the build context |
+| `image` | selects the image to run; also names the image when built with `build` |
+| `container_name` | sets a custom container name instead of the generated one |
+| `environment` | sets environment variables in the container |
+| `env_file` | reads container environment variables from a file |
+| `networks` | attaches the service to networks |
+| `volumes` | mounts named volumes or host paths |
+| `secrets` | grants access to declared secrets as files |
+| `ports` | publishes ports as `host:container` |
+| `expose` | documents container ports as a list; does not publish them on the host |
+| `depends_on` | sets dependency order; readiness requires an explicit condition |
+| `restart` | sets when Docker restarts an exited container, such as `unless-stopped` |
 | `command` | overrides the image's `CMD` |
 | `entrypoint` | overrides the image's `ENTRYPOINT` |
 
-**Under a top-level block, every key is a name.** This is the part that is easy to get wrong with `secrets:`, because the word appears twice and means something different each time:
+Use service names such as `database` to reach other services on a shared network; see [Docker networking](#08--docker-networking). A custom `container_name` is also resolvable there, but is optional and prevents scaling that service beyond one container.
+
+[Docker: Service reference](https://docs.docker.com/reference/compose-file/services/)
+
+</details>
+
+<a id="e--essential-compose-commands"></a>
+<details>
+<summary><h2>e · Essential commands</h2></summary>
+
+Run these from the directory containing your Compose file. First, check the file with `docker compose config --quiet`; it validates the configuration without starting containers.
+
+| Command | Purpose |
+|:--|:--|
+| `docker compose up -d --build` | builds images and creates or updates containers in the background |
+| `docker compose ps` | shows containers and their status |
+| `docker compose logs -f` | follows service logs |
+| `docker compose down` | stops and removes the project's containers and networks; keeps named volumes |
+
+**Running `up` again reuses unchanged containers.** If a service's configuration or image has changed, Compose recreates the affected containers while preserving mounted volumes.
+
+[Docker: `up`](https://docs.docker.com/reference/cli/docker/compose/up/) · [Docker: `down`](https://docs.docker.com/reference/cli/docker/compose/down/)
+
+</details>
+
+<a id="compose-history"></a>
+<details>
+<summary><h2>History</h2></summary>
+
+<p align="center"><img src="assets/docker-compose-history.png" alt="Compose V1 used Python and legacy file formats; V2 and V5 use Go and the Compose Specification, with a Go SDK added in V5" width="900"></p>
+
+If an old tutorial's file looks different, this is why:
+
+| File format | What changed |
+|:--|:--|
+| **1 (2014)** | service names were written at the root, without `services:` |
+| **2.x (2016)** | added `services:` and a `version: "2.x"` declaration |
+| **3.x (2017)** | used `version: "3.x"` and added options aimed at Swarm deployments |
+| **Compose Specification** | merged the 2.x and 3.x formats; current files omit `version:` |
+
+**File format 1** put services directly at the root. This format is historical and is not supported by current Compose:
 
 ```yaml
-secrets:                               # declare, once
-  api_key:                             # ← the NAME of a secret
-    file: ./secrets/api_key.txt        # ← where its content comes from
+web:
+  image: nginx
+```
 
+**File format 2** grouped them under `services:` and declared a format version:
+
+```yaml
+version: "2.4"
 services:
   web:
-    secrets: [api_key]                 # attach, by name
+    image: nginx
 ```
 
-**The name decides the path, the filename does not.** `file:` is only a host path that Compose reads. What the container sees is `/run/secrets/<name>`, and the `.txt` never appears:
+**Today, keep `services:` and omit `version:`.** Compose validates against the current specification; the old field is obsolete.
+
+**CLI versions are separate from file formats.** The original Compose V1 program was written in Python and invoked as `docker-compose`. Modern Compose V2 and V5 are written in Go and use `docker compose`. A file saying `version: "2.4"` does not mean it needs the V2 CLI.
+
+[Docker: Compose history](https://docs.docker.com/compose/intro/history/) · [Docker: Version field](https://docs.docker.com/reference/compose-file/version-and-name/)
+
+</details>
+
+<details>
+<summary><b>DEEPDIVE · More about Compose</b></summary>
+
+**The same Docker Engine.** Compose reads the file and sends requests through the [Engine API](#05--docker-architecture):
 
 ```text
-name in compose     file on host                 path in container
-api_key       ←──   ./secrets/api_key.txt   ──→  /run/secrets/api_key
+compose.yaml ──► docker compose ──► Engine API ──► dockerd
 ```
 
-**The name is part of the container interface.** Renaming the host file changes nothing, but renaming the Compose key changes the path inside the container. Use environment variables or `env_file` for ordinary configuration and secrets for confidential values.
+Docker Engine performs the container operations; these containers also appear in `docker ps`.
 
-**A user-defined network also provides DNS between its services:**
+**Secret names and paths.** `file:` selects the host file. The secret's name sets its default path inside the container. The long syntax can override that path with `target`.
 
-> Containers on the default bridge network can only access each other by IP addresses, unless you use the `--link` option, which is considered legacy.
->
-> User-defined bridges provide automatic DNS resolution between containers.
->
-> <sub><i>Docker, bridge network driver</i></sub>
+**`.env` and `env_file` do different jobs.** Compose reads `.env` for `${VARIABLE}` substitutions in the YAML. `env_file` passes variables into a service's containers. A `.env` file alone does not automatically populate every container's environment.
 
-**That is why a service can connect to `database` by name instead of tracking a changing container IP address.** A restart policy separately controls whether Docker starts a container again after it exits.
+[Docker: Variable interpolation](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/)
 
-</details>
+**`build` with `image`.** `image` names the build result. Without a `pull_policy`, Compose normally tries to find or pull that image before building if needed; `up --build` explicitly requests a build.
 
-<br>
+[Docker: Build and image](https://docs.docker.com/reference/compose-file/build/#using-build-and-image)
 
-<details>
-<summary><b>Ignore the <code>version:</code> line in old examples</b></summary>
+**Filenames.** `compose.yaml` is preferred. `compose.yml`, `docker-compose.yaml`, and `docker-compose.yml` are also supported; this project uses `docker-compose.yml`.
 
-<br>
-
-**Almost every Compose tutorial online opens with a line that is now obsolete:**
-
-```yaml
-version: "3.8"     # delete this
-```
-
-**It described which schema version the file targeted**, back when the format was versioned 2.0 through 3.8. The Compose Specification replaced that scheme, and Compose *"always uses the most recent schema to validate the Compose file, regardless of the `version` field."*
-
-**Leaving it in is not an error, but it is noise.** Current Compose releases warn:
-
-```
-WARN: the attribute `version` is obsolete, it will be ignored,
-      please remove it to avoid potential confusion
-```
-
-**The preferred filename is `compose.yaml`.** `compose.yml`, `docker-compose.yaml`, and `docker-compose.yml` are also supported for compatibility. If both a preferred and legacy filename exist, Compose selects the preferred one and warns about the ambiguity.
-
-</details>
-
-<br>
-
-<details>
-<summary><b>Compose is a client, not a second engine</b></summary>
-
-<br>
-
-**Compose creates nothing itself.** It parses the YAML, works out which containers, networks and volumes should exist, and then sends ordinary requests to the same API from § 05:
-
-```
-docker compose up
-      │  reads compose.yaml
-      │  decides what should exist
-      ▼
-  dockerd            same REST API, same socket
-      ▼
- containerd
-      ▼
-   runc
-      ▼
-Linux kernel
-```
-
-**So nothing new happens at the bottom.** A container started by Compose is indistinguishable from one started by `docker run`, and `docker ps` lists them side by side. Compose only removes the typing, it does not add a layer of isolation or a new kind of object.
-
-</details>
-
-<br>
-
-<details>
-<summary><b><code>docker compose</code>, not <code>docker-compose</code></b></summary>
-
-<br>
-
-**The hyphen marks the old implementation.** Compose V1 was a separate Python program invoked as `docker-compose`. V2 rewrote it in Go as a plugin to the `docker` CLI, invoked as a subcommand:
-
-```
-docker-compose    V1, Python, separate binary, no longer maintained
-docker compose    V2 onward, Go, a plugin of the docker CLI
-```
-
-**Use the space form in current documentation.** The hyphenated command may not exist on a modern installation, and tutorials that still use it often also carry the obsolete `version:` line.
+[Docker: How Compose works](https://docs.docker.com/compose/intro/compose-application-model/)
 
 </details>
 
@@ -1237,7 +1347,7 @@ docker compose    V2 onward, Go, a plugin of the docker CLI
 
 
 <p align="center"><img src="assets/mariadb_image.png" width="400"></p>
-<p align="center"><i>the seal came with the fork · MySQL's dolphin stayed with Oracle</i></p>
+<p align="center"><i>Notice how Docker, MariaDB, MySQL, Linux, and GNU all have animal logos?</i></p>
 
 <a id="a--what-mariadb-is"></a>
 <details>
