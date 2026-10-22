@@ -30,17 +30,16 @@ Since “you have to know the past to understand the present,” I included the 
 <details>
 <summary><a href="#04--docker-image">04 · Docker image</a></summary>
 
-* a · Definition
-* b · Docker images vs. containers
-* c · Image layers
+* a · Docker images vs. containers
+* b · Image layers
 
 </details>
 
 <details>
 <summary><a href="#05--docker-architecture">05 · Docker architecture (client ↔ daemon)</a></summary>
 
-* a · The CLI is a Docker API client
-* b · dockerd, containerd, shim, runc
+* a · The client side
+* b · The server side
 
 </details>
 
@@ -234,9 +233,9 @@ LXC combines the kernel's cgroups and support for isolated namespaces to provide
 
 Early versions of Docker used LXC as the container execution driver,[4] though LXC was replaced as the default in version 0.9.0[5][6] and was deprecated in 1.8.0,[7] before the driver was removed in 1.10.0.[8]
 
-[Wikipedia — LXC](https://en.wikipedia.org/wiki/LXC)
+[Wikipedia: LXC](https://en.wikipedia.org/wiki/LXC)
 
-[Docker — LXC vs. Docker](https://www.docker.com/blog/lxc-vs-docker/)
+[Docker: LXC vs. Docker](https://www.docker.com/blog/lxc-vs-docker/)
 </details>
 
 </details>
@@ -283,7 +282,7 @@ The kernel tracks each task (a process or thread) in a `task_struct`. Its **`nsp
 <p align="center"><img src="assets/task_struct-nsproxy.png" width="520"></p>
 <p align="center"><i>Linux kernel source · <a href="https://github.com/torvalds/linux/blob/master/include/linux/sched.h"><code>include/linux/sched.h</code></a></i></p>
 
-**Notice the comment above `nsproxy`: `/* Namespaces: */`.** This is the kernel's own code.
+**Notice the comment above `nsproxy`: `/* Namespaces: */`.** This is the Linux kernel's own code, check the link above.
 
 The `nsproxy` structure holds pointers to namespace objects:
 
@@ -423,85 +422,68 @@ Check out [this one-minute bit about Docker's history](https://www.youtube.com/w
 <details>
 <summary><h1>04 · Docker image</h1></summary>
 
-<a id="a--definition"></a>
-<details>
-<summary><h2>a · Definition</h2></summary>
-
-
 > **A container image is a standardized package that includes all of the files, binaries, libraries and configurations to run a container.**
 >
 > <sub><i><a href="https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-an-image/">Docker's own definition</a></i></sub>
 
-**In plainer words:** your whole setup saved as one package you can copy to any machine. The OS files, your app, its dependencies and its config, together.
+For example, an **nginx image** packages the nginx executable, its libraries, configuration files, and default startup command. Docker uses that package to create containers, so nginx does not need to be installed on the host.
 
-**What it does not contain is a kernel.** That is the entire difference from a VM image. A VM image carries an operating system that has to boot; a container image carries only userspace and borrows the kernel of whatever machine it lands on.
+- **Immutable:** its contents stay fixed. Updating the packaged software means building a new image.
+- **Layered:** you can start from an existing image and add your application's files and dependencies.
 
-**Two rules define an image:**
+The image provides userspace files; the container uses the **host kernel**.
 
-- **It is immutable.** Once created it can never be modified. You can only build a new one, or add changes on top of it.
-- **It is layered.** It is composed of layers, each one a set of filesystem changes that add, remove or modify files.
+<p align="center"><img src="assets/docker-image-versions.png" alt="A Dockerfile used to build separate image versions: v1, v2, and v3" width="700"></p>
+<p align="center"><i>each version is a separate image</i></p>
 
-**It's Docker's actual invention.** Isolation came from namespaces, limits from cgroups, layering from union filesystems. None of that is Docker's. The image is.
-
-
-</details>
-
-<a id="b--docker-images-vs-containers"></a>
+<a id="a--docker-images-vs-containers"></a>
 <details>
-<summary><h2>b · Docker images vs. containers</h2></summary>
+<summary><h2>a · Docker images vs. containers</h2></summary>
 
 
-> **An image is the package. A container is that package running.**
+> **An image is a package. A container is an instance created from it.**
 
-Docker defines a container as an **isolated process**: *"Containers are isolated processes for each of your app's components."* Self-contained, because it carries everything it needs, and isolated, because it barely touches the host or its neighbours.
+If you know classes and objects, think of the **image as a class** and each **container as an object created from it**. One image can create many containers, each with its own writable layer and state.
+
+<p align="center"><img src="assets/docker-image-vs-container.webp" alt="Dockerfile built into an image, then used to run a container" width="700"></p>
 
 | Image | Container |
 |:--|:--|
-| a package sitting on disk | a running process |
-| does nothing on its own | has a lifecycle: start, stop, die |
-| read-only | the image layers **plus its own writable directory** |
-| built once | created and destroyed freely |
+| Read-only | Adds its own writable layer |
+| Reusable across containers | Has its own data and state |
+| No running processes | Can be running or stopped |
 
-**Many containers, one image.** Each one gets its own writable directory, so each has its own data and state. Nothing a container writes ever reaches the image it came from.
-
+**`docker run` creates a container from an image and starts its process.** You can create several containers from the same image; changes in one container's writable layer leave the image and the other containers' writable layers unchanged.
 
 </details>
 
-<a id="c--image-layers"></a>
+<a id="b--image-layers"></a>
 <details>
-<summary><h2>c · Image layers</h2></summary>
+<summary><h2>b · Image layers</h2></summary>
 
 
-**An image is a stack of layers, and each layer is a set of filesystem changes:** additions, deletions, or modifications.
+An image is a stack of **read-only layers**. Each layer records files added, changed, or deleted during a build.
 
-```text
-layer 3   application configuration
-layer 2   installed application and dependencies
-layer 1   base userspace filesystem
-────────────────────────────────────────
-image     one combined filesystem
-```
+<p align="center"><img src="assets/docker-image-layers.png" alt="Read-only image layers beneath a container's writable layer, combined into one filesystem" width="800"></p>
 
-**On disk, every layer is extracted into its own directory.** They only become a filesystem when a container starts: a **union filesystem** stacks them into one unified view, and adds one more directory that belongs to the container itself.
+Each container adds its own **writable layer**. A **union filesystem**, such as OverlayFS, combines the layers into the single `/` its processes see.
 
-```
-writable layer   ← created at run time, for this container only
-layer 3   nginx.conf
-layer 2   /usr/sbin/nginx, /etc/nginx/...
-layer 1   /bin, /etc, /usr, /var ...
-──────────────────────────────────────
-the process sees:  one merged /
-```
+Containers can share image layers. Removing a container deletes its writable layer; use [volumes](#07--volumes) to keep data.
 
-**The merge is transparent to the process.** Opening `/etc/nginx.conf` looks like opening a file on a normal filesystem, not like reaching into layer 3.
+See § 06 a for how Dockerfile instructions create layers and how the build cache reuses them.
 
-**Why layers matter:**
+<details>
+<summary><b>DEEPDIVE</b></summary>
 
-- **Reuse.** You extend someone else's image by reusing their base layers and adding only your own data. Ten images built `FROM debian:bookworm` store that base **once**.
-- **Immutable.** Image layers are never touched. Every change a container makes lands in its own writable directory, and that directory dies with the container.
+With **OverlayFS**:
 
-**Docker records filesystem changes as layers while building an image.** § 06 a explains how Dockerfile instructions produce those changes and how the resulting layers are cached.
+- **Read:** use the topmost visible version of a file.
+- **Change:** on the first write to an image file, copy it into the writable layer, then modify the copy. This is **copy-on-write**.
+- **Delete:** hide an image file from that container. It remains in the read-only image layer.
 
+[Docker: OverlayFS](https://docs.docker.com/engine/storage/drivers/overlayfs-driver/)
+
+</details>
 
 </details>
 
@@ -521,41 +503,33 @@ the process sees:  one merged /
 <p align="center"><img src="assets/Docker-engine-components-flow.png" width="500"></p>
 <p align="center"><i>the Docker client reaches the daemon through the REST API</i></p>
 
-<details>
-<summary><b>DEEPDIVE · Docker architecture diagram</b></summary>
-
-<br>
-
 <p align="center"><img src="assets/docker_archi.png" width="900"></p>
 <p align="center"><i>the client sends commands to the daemon, which manages local objects and communicates with registries</i></p>
 
-</details>
+**Docker Engine is the complete client-server system:**
 
+- **`docker`**: the CLI client.
+- **Engine API**: the interface used to communicate with the daemon.
+- **`dockerd`**: the daemon that manages containers, images, networks, and volumes.
 
-<a id="a--the-cli-is-a-docker-api-client"></a>
+Part **a** explains the client and API. Part **b** explains the server side: `dockerd`, `containerd`, the shim, and `runc`.
+
+<a id="a--the-client-side"></a>
 <details>
-<summary><h2>a · The CLI is a Docker API client</h2></summary>
+<summary><h2>a · The client side</h2></summary>
 
 
-**The Docker CLI is the command-line client for Docker Engine.** When you run a command such as `docker ps`, the CLI translates it into an API request, sends it to the Docker daemon, and formats the daemon's response.
+**The Docker CLI is the command-line client for Docker Engine.** It translates commands into HTTP requests, sends them to `dockerd`, and formats the response.
 
-**The CLI does five client-side jobs:**
-
-- Parses commands and options.
-- Reads contexts and client configuration.
-- Negotiates an API version with the daemon.
-- Sends API requests.
-- Formats daemon responses for humans.
+For example, `docker ps` sends `GET /containers/json`. The daemon returns the container list, which the CLI displays as a table.
 
 ```text
-docker ps ──► Docker Engine API ──► dockerd
-                                      │
-               formatted table  ◄── response
+docker ps ──► Docker Engine API ──► dockerd ──► response ──► CLI formats table
 ```
 
-**The daemon performs the actual Docker operations.** The CLI does not inspect containers or start their processes itself. For example, `docker ps` maps to the API endpoint `GET /containers/json`; `dockerd` obtains the container list and returns it for the CLI to display.
+On Linux, requests normally travel through `/var/run/docker.sock`. **HTTP describes the messages; the Unix socket carries them locally.**
 
-**On Linux, the CLI normally reaches the daemon through `/var/run/docker.sock`.** A Docker context can instead point the same CLI at a remote engine over SSH or TCP secured with TLS.
+[Docker: Engine API](https://docs.docker.com/reference/api/engine/)
 
 <br>
 
@@ -574,7 +548,11 @@ curl -s --unix-socket /var/run/docker.sock http://localhost/version
 {"Version":"...","ApiVersion":"...","Os":"linux","Arch":"amd64", ...}
 ```
 
-The daemon returns the same server information that appears in `docker version`; the CLI requests it and formats the response for humans. For normal commands, the client and daemon negotiate the highest API version they both support so different Engine releases can still communicate.
+The daemon returns the same server information that appears in `docker version`.
+
+**Contexts** select which daemon the CLI connects to. The CLI reads the selected context and client configuration to find its connection settings.
+
+**API-version negotiation** selects a version supported by both client and daemon, allowing different Engine releases to communicate.
 
 **The socket is therefore a security boundary, not an ordinary file:**
 
@@ -591,16 +569,11 @@ With the usual rootful Docker daemon, anyone in the `docker` group can request p
 
 </details>
 
-<a id="b--dockerd-containerd-shim-runc"></a>
+<a id="b--the-server-side"></a>
 <details>
-<summary><h2>b · dockerd, containerd, shim, runc</h2></summary>
+<summary><h2>b · The server side</h2></summary>
 
-
-**`dockerd` does not create container processes directly.** It coordinates the operation and delegates the low-level work through this chain:
-
-```
-docker CLI  ──>  dockerd  ──>  containerd  ──>  containerd-shim  ──>  runc  ──>  kernel
-```
+**`dockerd` does not create container processes directly.** It coordinates the operation and delegates the low-level work.
 
 1. **`dockerd` handles Docker-level features.** It receives API requests and decides which images, networks, volumes, ports, and container settings are required.
 
@@ -608,13 +581,10 @@ docker CLI  ──>  dockerd  ──>  containerd  ──>  containerd-shim  ─
 
 3. **`containerd-shim` connects containerd to the runtime.** It invokes the runtime and remains available to supervise the container process, preserve its I/O, and report its exit status.
 
-4. **`runc` creates the isolated process.** It applies the OCI configuration—namespaces, cgroups, mounts, and capabilities—starts the process, and then exits.
-
+4. **`runc` creates the isolated process.** It applies the OCI configuration (namespaces, cgroups, mounts, and capabilities), starts the process, and then exits.
 
 <p align="center"><img src="assets/docker_use_containerd.png" width="574"></p>
-<p align="center"><i>a simplified container-creation path · each <code>runc</code> invocation exits after starting the container process · <a href="https://mlops-for-all.github.io/en/docs/prerequisites/docker/">source</a></i></p>
-
-**`runc` performs the low-level container setup**: namespaces, cgroups, capabilities, mounts, and process creation. Once the container process is running, `runc` exits; the shim remains.
+<p align="center"><i>a simplified container-creation path</i></p>
 
 <br>
 
@@ -635,7 +605,7 @@ That single command crosses several boundaries:
 docker CLI  ──REST/HTTP──>  dockerd  ──gRPC──>  containerd  ──ttrpc──>  containerd-shim
 ```
 
-The CLI first sends Docker API requests such as `POST /containers/create` and `POST /containers/{id}/start`. `dockerd` translates Docker concepts—image names, published ports, networks, mounts, environment variables, and restart policies—into the configuration needed by the lower layers.
+The CLI first sends Docker API requests such as `POST /containers/create` and `POST /containers/{id}/start`. `dockerd` translates Docker concepts (image names, published ports, networks, mounts, environment variables, and restart policies) into the configuration needed by the lower layers.
 
 On a typical Linux installation, `dockerd` reaches containerd's gRPC API through a Unix socket. containerd then communicates with the runtime shim over ttrpc. These are API relationships, not necessarily parent-child relationships between the processes.
 
@@ -650,7 +620,7 @@ That bundle contains two important things:
 - a root filesystem for the process
 - an OCI configuration describing its command, namespaces, cgroups, mounts, capabilities, and other runtime settings
 
-`runc` asks the Linux kernel to apply that configuration and starts the requested command. The result is an ordinary Linux process—not a daemon maintained by `runc`.
+`runc` asks the Linux kernel to apply that configuration and starts the requested command. The result is an ordinary Linux process, not a daemon maintained by `runc`.
 
 <br>
 
@@ -690,61 +660,59 @@ This separation gives higher-level platforms their own user-facing features whil
 <details>
 <summary><h1>06 · Dockerfile</h1></summary>
 
-
-> **A Dockerfile is a recipe for building an image.** A plain-text file of instructions that the builder executes in order. Docker uses **BuildKit** by default.
+> **A Dockerfile is a plain-text recipe for building an image.** It describes the base image, software, files, and default startup command. Docker uses **BuildKit** as its builder.
 
 <p align="center"><img src="assets/docker_file_to_image_to_container.png" width="700"></p>
 <p align="center"><i>a Dockerfile is built into an image · an image is run as a container</i></p>
 
 ```dockerfile
 FROM debian:bookworm
-RUN apt-get update && apt-get install -y nginx
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends nginx \
+    && rm -rf /var/lib/apt/lists/*
 COPY nginx.conf /etc/nginx/conf.d/
 CMD ["nginx", "-g", "daemon off;"]
 ```
+
+With `nginx.conf` beside the Dockerfile, build the image with:
 
 ```bash
 docker build -t my-nginx .
 ```
 
-
 **Common Dockerfile instructions:**
 
 | Instruction | Role |
 |:--|:--|
-| `FROM` | names the base image to build on. Always the first instruction |
-| `RUN` | executes a command at build time, inside a temporary container |
-| `COPY` | copies files from the build context into the image |
-| `ADD` | like `COPY`, but also unpacks local tar archives and fetches URLs |
-| `WORKDIR` | sets the working directory for every instruction that follows, and for the running container. Creates it if missing |
-| `ENV` | sets an environment variable that stays in the final image |
-| `ARG` | build-time variable only. It does not exist in the running container |
-| `USER` | sets the UID for the instructions that follow, and for PID 1 |
-| `EXPOSE` | records a port as documentation |
-| `VOLUME` | declares a path as a volume |
-| `LABEL` | adds metadata: author, version, description |
-| `ENTRYPOINT` | the fixed command the container runs |
-| `CMD` | default arguments to `ENTRYPOINT`, or the whole command when there is no `ENTRYPOINT` |
+| `FROM` | Starts a build stage from a base image |
+| `RUN` | Runs a command during the build |
+| `COPY` | Copies files into the image |
+| `ADD` | Copies files, with archive extraction and remote-source support |
+| `WORKDIR` | Sets the working directory; creates it if missing |
+| `ENV` | Sets default environment variables for the image |
+| `ARG` | Defines a build-time variable |
+| `USER` | Selects the user for later build commands and container startup |
+| `EXPOSE` | Documents a port the application uses |
+| `VOLUME` | Declares a volume mount point |
+| `LABEL` | Adds image metadata |
+| `ENTRYPOINT` | Sets the startup executable |
+| `CMD` | Sets the default command or arguments |
 
-**`EXPOSE` is the one that gets misread.** It publishes nothing and opens nothing. Only `docker run -p` or Compose's `ports:` map a port to the host, and containers on the same docker network reach each other whether or not `EXPOSE` is present.
+**`EXPOSE` does not publish a port.** Use `docker run -p` or Compose's `ports:` to map it to the host.
 
-**`ARG` is not a way to pass a secret.** Its value is baked into the layer and `docker history` prints it back.
+**Build arguments are unsuitable for secrets:** their values can appear in image history or metadata. Use [build secret mounts](https://docs.docker.com/build/building/secrets/) instead.
+
+[Docker — Dockerfile reference](https://docs.docker.com/reference/dockerfile/)
 
 <a id="a--instructions-and-layers"></a>
 <details>
 <summary><h2>a · Instructions and layers</h2></summary>
 
+**`FROM` reuses the base image's existing layers.** Build steps such as `RUN`, `COPY`, and `ADD` record filesystem changes in new layers. `CMD`, `ENTRYPOINT`, and `ENV` set image configuration.
 
-**Only instructions that change the filesystem create a layer:**
+The example above adds nginx and its configuration on top of Debian's layers. `CMD` records what to run when a container starts. The total layer count depends on the base image and filesystem changes; it is not the number of instructions. See § 04 b.
 
-| Creates a layer | Metadata only |
-|:--|:--|
-| `FROM` `RUN` `COPY` `ADD` | `CMD` `ENTRYPOINT` `ENV` `WORKDIR` `EXPOSE` ... |
-
-So the example above is **4 instructions but 3 layers**. This is where the layers in § 04 c come from: **the Dockerfile is what produces them.**
-
-**Those layers also form the build cache.** When an instruction and its inputs have not changed, Docker can reuse the existing result instead of running that step again. Once a layer changes, the layers that depend on it must be rebuilt, so stable instructions generally belong before frequently edited files.
-
+**The build cache reuses unchanged steps.** When an instruction or its inputs change, steps that depend on it need rebuilding. Put stable dependency installation before frequently edited application files.
 
 </details>
 
@@ -752,15 +720,15 @@ So the example above is **4 instructions but 3 layers**. This is where the layer
 <details>
 <summary><h2>b · FROM</h2></summary>
 
-
-**`FROM` names the base image and comes first:**
+**`FROM` selects the base image and starts a build stage:**
 
 ```dockerfile
 FROM debian:bookworm
 ```
 
-**Avoid `debian:latest` when reproducibility matters.** `latest` is a moving tag: the image behind it changes over time, so a build that worked yesterday can behave differently tomorrow. Pinning a release such as `bookworm` makes the intended base explicit.
+`ARG` declarations can appear before the first `FROM` to parameterize it.
 
+A release tag such as `bookworm` makes the intended base explicit. Tags can still change; pin an image digest when you need the exact same base contents.
 
 </details>
 
@@ -768,61 +736,36 @@ FROM debian:bookworm
 <details>
 <summary><h2>c · RUN</h2></summary>
 
-
-**`RUN` executes a command in a temporary container and freezes the result as a layer.** It is where your image size is decided.
-
-**Rule 1: `update` and `install` go in the same `RUN`.**
+**`RUN` executes a command while building the image.** For Debian packages, update, install, and clean up in the same instruction:
 
 ```dockerfile
-# wrong
-RUN apt-get update
-RUN apt-get install -y nginx
-```
-
-The first line gets cached. Weeks later you add a package, the `update` layer is reused from cache with **stale package lists**, and the install asks for versions that no longer exist. The build breaks for no visible reason.
-
-```dockerfile
-# right
-RUN apt-get update && apt-get install -y nginx
-```
-
-One layer, so the cache invalidates as a unit.
-
-**Rule 2: clean up inside the same `RUN`, or it does nothing.**
-
-```dockerfile
-# useless
-RUN apt-get update && apt-get install -y nginx
-RUN rm -rf /var/lib/apt/lists/*
-```
-
-**Layers are immutable.** Deleting a file in layer 3 cannot remove it from layer 2. It only writes a **whiteout marker** that hides it. The bytes are still in the image and still shipped.
-
-```dockerfile
-# right
 RUN apt-get update \
     && apt-get install -y --no-install-recommends nginx \
     && rm -rf /var/lib/apt/lists/*
 ```
 
-Now those files never exist in a committed layer at all.
+Keeping `update` and `install` together avoids reusing stale package lists when the install command changes. Cleaning up in the same `RUN` keeps those lists out of the resulting layer.
 
-**`--no-install-recommends`** skips the packages apt would pull in under `Recommends`. That is a distinct relationship from `Suggests`, which apt never installs automatically regardless of this flag. Skipped correctly, the size difference is not a rounding error: Canonical measured a 60% smaller image and about 15% faster builds after adding the flag across their Python website Dockerfiles.
+**Deleting files in a later layer only hides them.** The earlier layer still contains their bytes.
 
-**It is a linter rule, not a personal habit.** hadolint's `DL3015` flags any `apt-get install` missing it, and a Depot.dev scan of real-world Dockerfiles found it triggered in 22% of them, meaning the other 78% already comply. `DL3009`, cleaning up `/var/lib/apt/lists/*` in the same layer, is the rule that pairs with it, covered above.
+<details>
+<summary><b>DEEPDIVE · apt options</b></summary>
 
-**Fewer packages also means a smaller attack surface.** Every installed package is more code that can carry a CVE, which is why dropping unused recommends shows up in most Docker security checklists.
+**`--no-install-recommends` skips recommended packages.** Install any your application needs explicitly. For example, this project's WordPress image installs `ca-certificates` for HTTPS connections.
 
-**The flag can break things, deliberately.** Some packages genuinely need their recommends: fonts for a headless browser, locale or timezone data for some runtimes, or `ca-certificates` for software that connects over TLS. If a package that used to work fails after adding this flag, the missing recommend is the first suspect, and it gets added back explicitly, not fixed by dropping the flag.
+APT normally leaves `Suggests` packages uninstalled; this flag changes how it treats `Recommends`.
 
-**A global alternative exists** for turning this off on every future `apt-get install` instead of repeating the flag each time:
+To disable recommended packages for later apt installs throughout an image:
 
 ```dockerfile
 RUN echo 'APT::Install-Recommends "false";' > /etc/apt/apt.conf.d/99norecommends
 ```
 
-Not needed here, since one `RUN` already installs every package this image needs. On a Debian desktop or dev machine, do not set this globally, recommends are usually what you actually want there.
+Related Hadolint checks: [DL3015 — skip extra packages](https://github.com/hadolint/hadolint/wiki/DL3015) and [DL3009 — remove package lists](https://github.com/hadolint/hadolint/wiki/DL3009).
 
+[Docker — RUN best practices](https://docs.docker.com/build/building/best-practices/#run)
+
+</details>
 
 </details>
 
@@ -830,37 +773,31 @@ Not needed here, since one `RUN` already installs every package this image needs
 <details>
 <summary><h2>d · COPY and the build context</h2></summary>
 
-
-**The `.` at the end of the build command is not decoration.** It is the **build context**: the directory that gets packed up and sent to the daemon.
+**The build context is the set of files available to the builder.** Here, `.` selects the current directory:
 
 ```bash
 docker build -t my-nginx .
 ```
 
-**Remember § 05: the CLI builds nothing.** It tars that directory, sends it over the socket, and BuildKit builds on the other side. That is why the output starts with a transfer, and it explains the rules below.
-
-**`COPY` can only read from inside the context.**
+Plain `COPY` reads from that context. It cannot reach files outside it using `../`:
 
 ```dockerfile
-COPY nginx.conf /etc/nginx/conf.d/    # fine, it was sent
-COPY ../secrets/db_password /run/     # impossible, never sent
+COPY nginx.conf /etc/nginx/conf.d/
 ```
 
-**There is no way around it.** The daemon may sit on another machine entirely; it simply does not have your parent directory. Any path outside the context does not exist as far as the build is concerned.
+**`.dockerignore` excludes files from the context:**
 
-**`.dockerignore` keeps junk out of the transfer.** Same syntax as `.gitignore`:
-
-```
+```text
 .git
 *.md
 secrets/
 ```
 
-Without it you ship your whole `.git` history to the daemon on every build, which is slower and risks baking things into the image that should never be there.
+BuildKit loads files as needed and can skip unused files. Excluding private or irrelevant files keeps them out of reach of build instructions such as `COPY .`.
 
-**`COPY` vs `ADD`:** both copy files in, but `ADD` also unpacks local tar archives and can fetch URLs. That extra magic is surprising and hard to audit.
+Use **`COPY`** for ordinary file copying. **`ADD`** also supports extracting local tar archives and fetching remote sources.
 
-> **Use `COPY` unless you specifically need `ADD`.** This is Docker's own recommendation.
+[Docker — Build context](https://docs.docker.com/build/concepts/context/)
 
 </details>
 
@@ -868,47 +805,20 @@ Without it you ship your whole `.git` history to the daemon on every build, whic
 <details>
 <summary><h2>e · CMD, ENTRYPOINT and PID 1</h2></summary>
 
-
-**They both say what to run.** `ENTRYPOINT` is the fixed command, `CMD` is the default argument. Used alone, either works.
-
-**Write them in exec form, always:**
+**`ENTRYPOINT` selects the startup executable. `CMD` supplies default arguments**, or the default command when no `ENTRYPOINT` is set.
 
 ```dockerfile
-CMD ["nginx", "-g", "daemon off;"]     # exec form: nginx is PID 1
-CMD nginx -g "daemon off;"             # shell form: /bin/sh is PID 1
+ENTRYPOINT ["nginx"]
+CMD ["-g", "daemon off;"]
 ```
 
-**Shell form silently wraps your command in `/bin/sh -c`.** The shell becomes PID 1 and your daemon becomes its child.
+Together, these run `nginx -g "daemon off;"` when the container starts.
 
-**Why that breaks things:** PID 1 is the reaper. It receives the signals and adopts orphans. `sh` does not forward `SIGTERM`, so `docker stop` is ignored, waits 10 seconds, then kills the container. Zombies pile up too.
+**Prefer exec form**, as above, so the service starts directly without an extra shell. Docker sends stop signals to **PID 1**; a shell wrapper may not forward them to the service. If an entrypoint script launches the service, finish it with `exec "$@"` to replace the shell.
 
-**The daemon must stay in the foreground.** A service that daemonises exits immediately, and the container dies with it:
+**Keep the service in the foreground.** The container stops when its main process exits. A placeholder such as `sleep infinity` hides whether the actual service is still running.
 
-```
-nginx     -g "daemon off;"
-php-fpm   -F
-mysqld    (already foreground)
-```
-
-**Do not keep a container alive with placeholders such as `tail -f`, `sleep infinity`, or `while true`.** Each one is a fake process holding the container open while the real service runs behind it, or not at all.
-
-<br>
-
-**Which leaves the question of what belongs in the script at all.** The rule is: anything that depends only on the image goes in the image, only what depends on runtime input goes in the entrypoint.
-
-```text
-Dockerfile        install dependencies           fixed, known at build time
-entrypoint        render runtime configuration   needs environment variables or secrets
-entrypoint        initialize persistent data     needs the volume mounted at run time
-```
-
-**Everything put in the image is done once and cached.** Everything put in the entrypoint is redone at every container start, which is why anything placed there needs a guard against running twice.
-
-<br>
-
-### Read about PID 1 and the best practices for writing Dockerfiles.
-
-**PID 1 is the container's main process, so making it the actual service gives Docker direct control over that service's lifecycle and signals.**
+Install dependencies in the **Dockerfile**. Use an **entrypoint script** for configuration that needs runtime variables or secrets, and for initializing mounted data. Guard initialization so a restart preserves existing data.
 
 </details>
 
@@ -916,46 +826,36 @@ entrypoint        initialize persistent data     needs the volume mounted at run
 <details>
 <summary><h2>f · Users and privileges inside a container</h2></summary>
 
-
-> **Unless told otherwise, every process in a container runs as UID 0, root.**
-
-**Nothing special makes this happen.** There is no login, no `su`, no privilege escalation. `runc` simply `exec`s the process with UID 0 because no other UID was requested. Three places can request one: the `USER` instruction in the Dockerfile, `--user` on `docker run`, or `user:` in Compose. If none of them appear, the answer stays 0.
-
-**This is why `RUN` never needs `sudo`:**
+**`USER` selects the account for later `RUN` steps and the container's startup command.** The base image may already set it; otherwise the default is UID 0, root.
 
 ```dockerfile
-RUN apt-get update && apt-get install -y nginx
+USER www-data
 ```
 
-Each `RUN` executes in a temporary container whose process is already root, so `apt-get` has every permission it needs. Writing `sudo` there fails outright, because `debian:bookworm` does not even ship the `sudo` package.
+Choose an existing account with the permissions the application needs. `docker run --user` or Compose's `user:` can override the image's default.
 
-<br>
+Install packages as root before switching users. Build steps already running as root do not need `sudo`.
 
-### Container root is not quite host root
+**File ownership follows numeric UIDs and GIDs.** With rootful Docker and no user-namespace remapping, a file written as UID 999 also appears as UID 999 on a mounted host directory. Match directory permissions to the service's actual IDs.
 
-**With Docker's default configuration, UID 0 inside is the same UID 0 as the host.** User namespace remapping exists, but it is off by default, so the kernel sees one identical numeric identity on both sides.
+<details>
+<summary><b>DEEPDIVE · Container privileges</b></summary>
 
-**What separates them is not identity but capabilities.** Linux splits root's power into capability bits, and Docker grants a container only a subset of them:
+With rootful Docker and no user-namespace remapping, UID 0 inside maps to UID 0 on the host. Namespaces, reduced capabilities, seccomp, and security profiles restrict what the process can do. Rootless Docker and user-namespace remapping change the UID mapping.
+
+Linux divides root's privileges into **capabilities**. Examples from Docker's default sets:
 
 | Granted by default | Not granted by default |
 |:--|:--|
-| `CHOWN` `SETUID` `SETGID` `KILL` `NET_BIND_SERVICE` `NET_RAW` `SYS_CHROOT` ... | `SYS_ADMIN` `SYS_MODULE` `SYS_TIME` `SYS_BOOT` ... |
+| `CHOWN` `SETUID` `SETGID` `KILL` `NET_BIND_SERVICE` `NET_RAW` `SYS_CHROOT` | `SYS_ADMIN` `SYS_MODULE` `SYS_TIME` `SYS_BOOT` |
 
-**So container root can chown files and bind port 443, but cannot load a kernel module, change the system clock, or mount arbitrary filesystems.** Seccomp and AppArmor profiles narrow it further. It is root over the container's own namespaces, not over the machine.
+A service can also start as root, prepare files, then drop privileges using `setuid()` and `setgid()`. Files it writes afterward belong to that service account.
 
-> ⚠️ **The exception is the socket.** Anyone who can reach `/var/run/docker.sock` can ask the daemon for a container with every capability and the host filesystem mounted inside. That is why § 05 a calls the `docker` group equivalent to root.
+Access to a rootful Docker daemon's API can grant host-level privileges; see § 05 a.
 
-<br>
+[Docker — Runtime privileges and capabilities](https://docs.docker.com/engine/containers/run/#runtime-privilege-and-linux-capabilities)
 
-### Dropping privileges on purpose
-
-**A daemon that starts as root does not have to stay root.** The usual pattern is to acquire whatever needs privilege, then call `setuid()` and `setgid()` to a dedicated unprivileged system account. Files the daemon creates are then owned by that account rather than by root.
-
-<br>
-
-### The practical consequence for volumes
-
-**UIDs are numbers, and they cross the boundary unchanged.** A file written by UID 999 inside the container appears on a mounted host directory as owned by whatever host account happens to be UID 999. Ownership is decided by the container process that writes the file, not by the user who ran Docker.
+</details>
 
 </details>
 
@@ -973,7 +873,7 @@ Each `RUN` executes in a temporary container whose process is already root, so `
 
 > **A volume is a directory on the host that Docker mounts into a container, so the data written there survives the container.**
 
-**A container's filesystem dies with the container.** Remove a database container and every table stored in its writable layer goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 c explains why.
+**A container's filesystem dies with the container.** Remove a database container and every table stored in its writable layer goes with it. That is normally correct behaviour, not a flaw: the whole point of an image is that a container is disposable, and § 04 b explains why.
 
 **Databases and uploaded media are the exception.** They are the one thing that must outlive the process that wrote them.
 
@@ -3516,12 +3416,12 @@ MAIN : Found 0 legacy dbengines, setting multidb diskspace to 256MB
 
 https://mlops-for-all.github.io/en/docs/prerequisites/docker/
 
-[Solomon Hykes — The future of Linux Containers (PyCon 2013)](https://www.youtube.com/watch?v=362sHaO5eGU)
+[Solomon Hykes: The future of Linux Containers (PyCon 2013)](https://www.youtube.com/watch?v=362sHaO5eGU)
 
-[dotScale 2013 — Solomon Hykes — Why we built Docker](https://www.youtube.com/watch?v=3N3n9FzebAA&t=1054s)
+[dotScale 2013: Solomon Hykes: Why we built Docker](https://www.youtube.com/watch?v=3N3n9FzebAA&t=1054s)
 
-[Linux Containers — Official website](https://linuxcontainers.org/)
+[Linux Containers: Official website](https://linuxcontainers.org/)
 
-[Evolution of Linux Containers — Tilak Patidar](https://medium.com/@tilakpatidar/evolution-of-linux-containers-660fcfdefa3e)
+[Evolution of Linux Containers: Tilak Patidar](https://medium.com/@tilakpatidar/evolution-of-linux-containers-660fcfdefa3e)
 
-[Docker — LXC vs. Docker](https://www.docker.com/blog/lxc-vs-docker/)
+[Docker: LXC vs. Docker](https://www.docker.com/blog/lxc-vs-docker/)
