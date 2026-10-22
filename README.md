@@ -90,31 +90,17 @@ Since “you have to know the past to understand the present”, I included the 
 <details>
 <summary><a href="#11--wordpress">11 · WordPress</a></summary>
 
-* a · What WordPress is
-* b · The WordPress container
+* a · History
+* b · WordPress deep dive
+* c · The WordPress container
 
 </details>
 
 <details>
 <summary><a href="#12--nginx">12 · nginx</a></summary>
 
-* a · What nginx is
-* b · The configuration files
-* c · TLS and the certificate
-* d · The nginx container
-
-</details>
-
-<div>&emsp;<a href="#13--the-makefile">13 · The Makefile</a></div>
-<br>
-
-<details>
-<summary><a href="#14--bonus">14 · Bonus</a></summary>
-
-* a · A static website
-* b · Adminer
-* c · redis cache
-* d · The service of my choice
+* a · TLS and the certificate
+* b · The nginx container
 
 </details>
 
@@ -1666,16 +1652,10 @@ ready for connections
 <details>
 <summary><h1>11 · WordPress</h1></summary>
 
+> **WordPress is open-source content management system (CMS) software, written in PHP, that stores its content in a MySQL or MariaDB database and generates web pages from it on request.**
 
 <p align="center"><img src="assets/wordpress_images.png" width="300"></p>
 <p align="center"><i>PHP source code, not a server</i></p>
-
-<a id="a--what-wordpress-is"></a>
-<details>
-<summary><h2>a · What WordPress is</h2></summary>
-
-
-> **WordPress is open-source content management system (CMS) software, written in PHP, that stores its content in a MySQL or MariaDB database and generates web pages from it on request.**
 
 **WordPress describes itself in one line:** *"built on PHP and MariaDB, and licensed under the GPLv2."* Those two names are not a coincidence for this project. They are the two other containers.
 
@@ -1687,6 +1667,29 @@ ready for connections
 - **Extends itself** through themes, which decide appearance, and plugins, which add behaviour.
 
 <br>
+
+<a id="wordpress-history"></a>
+<details>
+<summary><h2>a · History</h2></summary>
+
+<br>
+
+**WordPress began in 2003 as a fork of b2/cafelog**, a PHP blogging script whose original developer had stopped maintaining it. Matt Mullenweg and Mike Little forked it and kept it going under the GPL.
+
+**It was a blogging tool for years before it was a CMS.** The vocabulary still shows it: the main content table is `wp_posts`, and pages are stored there too, as posts with a different `post_type`.
+
+**The comparison with MariaDB is worth noticing.** Both projects in this stack exist because of a fork:
+
+```
+b2/cafelog  ──abandoned──►  WordPress   (2003)
+MySQL       ──acquired──►   MariaDB     (2009)
+```
+
+</details>
+
+<a id="b--wordpress-deep-dive"></a>
+<details>
+<summary><h2>b · WordPress deep dive</h2></summary>
 
 <details>
 <summary><b>WordPress is not a server</b></summary>
@@ -1797,6 +1800,7 @@ $table_prefix = 'wp_';
 
 <br>
 
+<a id="wordpress-php-fpm-and-fastcgi"></a>
 <details>
 <summary><b>DEEPDIVE: php-fpm and FastCGI</b></summary>
 
@@ -1856,57 +1860,166 @@ php-fpm master        reads config, spawns and reaps workers, holds the socket
 
 **The master never executes PHP.** It supervises. That division is what lets a worker crash on a fatal error without taking the service down, and it is why php-fpm is the process that belongs at PID 1.
 
-**Debian's defaults for both of those do not suit a container.** § 11 b covers what has to change and why.
+**Debian's defaults for both of those do not suit a container.** § 11 c covers what has to change and why.
 
 </details>
 
 <br>
 
-<details>
-<summary><b>History: a fork of an abandoned blog script</b></summary>
-
-<br>
-
-**WordPress began in 2003 as a fork of b2/cafelog**, a PHP blogging script whose original developer had stopped maintaining it. Matt Mullenweg and Mike Little forked it and kept it going under the GPL.
-
-**It was a blogging tool for years before it was a CMS.** The vocabulary still shows it: the main content table is `wp_posts`, and pages are stored there too, as posts with a different `post_type`.
-
-**The comparison with MariaDB is worth noticing.** Both projects in this stack exist because of a fork:
-
-```
-b2/cafelog  ──abandoned──►  WordPress   (2003)
-MySQL       ──acquired──►   MariaDB     (2009)
-```
-
 </details>
 
-</details>
-
-<a id="b--the-wordpress-container"></a>
+<a id="c--the-wordpress-container"></a>
 <details>
-<summary><h2>b · The WordPress container</h2></summary>
+<summary><h2>c · The WordPress container</h2></summary>
 
+**Three files build this service:**
 
-**Three files build this service**, the same split as § 10 c:
-
-```
+```text
 Dockerfile              how the image is built
 conf/www.conf           what settings php-fpm runs with
 tools/entrypoint.sh     what happens on every container start
 ```
 
-<br>
+<details>
+<summary><b>The Dockerfile</b></summary>
+
+```dockerfile
+FROM debian:bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	php8.2-fpm \
+	php8.2-mysql \
+	php8.2-redis \
+	ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
+COPY conf/www.conf /etc/php/8.2/fpm/pool.d/www2.conf
+
+ADD --chmod=755 https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar /usr/local/bin/wp
+
+WORKDIR /var/www/html
+
+RUN wp core download --allow-root && chown -R www-data:www-data /var/www/html
+
+COPY --chmod=755 tools/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+CMD ["php-fpm8.2", "-F"]
+```
+
+| Package | Purpose |
+|:--|:--|
+| `php8.2-fpm` | runs the WordPress PHP code |
+| `php8.2-mysql` | lets PHP connect to MariaDB |
+| `php8.2-redis` | lets PHP connect to Redis for object caching |
+| `ca-certificates` | supplies trusted certificates for HTTPS downloads |
+
+**WP-CLI manages WordPress from the terminal.** The Dockerfile downloads it as a `.phar` (PHP Archive), then uses `wp core download` to put the WordPress files in `/var/www/html`.
+
+`chown` gives `www-data`, the PHP-FPM worker account, ownership of those files so WordPress can write uploads and updates.
+
+`ENTRYPOINT` runs the startup script. `CMD` passes it `php-fpm8.2 -F`; `-F` keeps PHP-FPM in the foreground.
+
+[WP-CLI: Download WordPress](https://developer.wordpress.org/cli/commands/core/download/)
+
+</details>
 
 <details>
-<summary><b>(overview) The volume nginx and wordpress share</b></summary>
+<summary><b>The configuration file</b></summary>
 
-<br>
+The active settings in `conf/www.conf` are:
 
-**§ 11 a has the request path, browser to nginx to php-fpm to mariadb.** The dependency runs one way only: php-fpm binds 9000 and waits whether or not nginx exists, mariadb binds 3306 and waits whether or not wordpress exists. Nothing calls back upward.
-
-**What that diagram leaves out is a filesystem shared between two containers:**
-
+```ini
+[www]
+listen = 0.0.0.0:9000
 ```
+
+**`[www]` selects the worker pool.** `listen` makes it accept FastCGI connections on all IPv4 interfaces inside the container. nginx reaches it at `wordpress:9000` over the Docker network; Compose does not publish this port on the host.
+
+The Dockerfile copies this file to `pool.d/www2.conf`. It loads after Debian's `www.conf`, overriding the listening address while keeping the other pool settings.
+
+[PHP: FPM configuration](https://www.php.net/manual/en/install.fpm.configuration.php)
+
+</details>
+
+<details>
+<summary><b>The entrypoint script</b></summary>
+
+```bash
+#!/bin/bash
+
+set -e
+
+DB_HOST=mariadb
+DB_NAME=$MYSQL_DATABASE
+DB_USER=$MYSQL_USER
+DB_PASSWORD=$(cat /run/secrets/db_password)
+source /run/secrets/credentials
+
+counter=0
+while ! (exec 3<>/dev/tcp/$DB_HOST/3306) 2>/dev/null && (($counter<20)) ; do
+	echo "Waiting for Mariadbd setup to finish..."
+	sleep 1
+	counter=$((counter+1))
+done
+
+if (( counter >= 20 )); then
+    echo "mariadb never became reachable, giving up" >&2
+    exit 1
+fi
+
+if [ ! -f "/var/www/html/wp-config.php" ]; then
+
+	wp config create \
+	--dbname=${DB_NAME} \
+	--dbuser=${DB_USER} \
+	--dbpass=${DB_PASSWORD} \
+	--dbhost=${DB_HOST} \
+	--allow-root
+
+	wp core install \
+	--url=https://login.42.fr \
+	--title="Inception" \
+	--admin_user=saad \
+	--admin_password=$ADMIN_PASSWORD \
+	--admin_email=admin@example.com \
+	--allow-root
+
+	wp plugin install redis-cache --activate --allow-root
+	wp config set WP_REDIS_HOST redis --allow-root
+	wp redis enable  --allow-root
+
+	wp user create simo \
+	simo@gmail.com \
+	--user_pass=$USER_PASSWORD \
+	--allow-root
+
+fi
+exec "$@"
+```
+
+**Setup happens at container start**, when Compose supplies the volume, environment variables, and secrets.
+
+1. **Read the configuration.** The database name and database user come from the environment. Two secret files supply three passwords: `db_password` holds the database password; `credentials` defines `ADMIN_PASSWORD` and `USER_PASSWORD`.
+2. **Wait for MariaDB's TCP port.** The script retries for about 20 seconds before giving up. This checks whether a connection can be opened, not whether the database and credentials are ready. Short-form `depends_on` only controls startup order.
+3. **Set up WordPress if `wp-config.php` is missing.** Create the configuration, install the database tables and administrator account, enable Redis caching, then create the second user. For this project, the administrator's name must not contain `admin` or `administrator`, in any letter case.
+4. **Start PHP-FPM.** `exec "$@"` replaces the shell with the command from `CMD`, making PHP-FPM PID 1.
+
+**The guard checks for a file, not a completed installation.** If setup fails after creating `wp-config.php`, the next start skips the remaining steps. `wp core is-installed` checks whether WordPress's database tables exist; it does not check the Redis setup or second account.
+
+`--allow-root` lets WP-CLI run as root in this entrypoint.
+
+[Docker: Startup order](https://docs.docker.com/compose/how-tos/startup-order/) · [WP-CLI: Check installation](https://developer.wordpress.org/cli/commands/core/is-installed/)
+
+</details>
+
+<details>
+<summary><b>The shared files</b></summary>
+
+**nginx and PHP-FPM need the same WordPress files at the same path.** Both containers mount `wordpress_volume` at `/var/www/html`:
+
+```text
               named volume: the WordPress files
               /home/login/data/wordpress
                           │
@@ -1917,221 +2030,55 @@ nginx                              wordpress
 reads .css .js .jpg                executes .php
 ```
 
-**FastCGI does not send code, it sends a path.** nginx forwards the request with `SCRIPT_FILENAME=/var/www/html/index.php`, and php-fpm opens that path on its own filesystem. If the two containers did not mount the same volume, php-fpm would be told to run a file that does not exist on its side. That is why one volume is mounted twice.
+nginx sends `SCRIPT_FILENAME=/var/www/html/index.php` over FastCGI. PHP-FPM opens that path in its own container, so the shared mount makes the file available on both sides. See the [FastCGI deep dive](#wordpress-php-fpm-and-fastcgi).
 
 </details>
 
-<br>
-
 <details>
-<summary><b>(Dockerfile) What the image needs</b></summary>
+<summary><b>DEEPDIVE · Configuration and startup</b></summary>
 
-<br>
+### Configuration loading
 
-**WordPress requires exactly two PHP extensions.** Its own hosting handbook lists `json` and `mysqli` as required, and everything else as highly recommended.
+**Both pool files are read.** Their `[www]` settings are combined, and a later value overrides an earlier one:
 
-| package | why |
-|:--|:--|
-| `php8.2-fpm` | the daemon itself, and PID 1 |
-| `php8.2-mysql` | provides `mysqli`, there is no database access without it |
-| `ca-certificates` | wp-cli downloads over HTTPS and PHP validates against the system CA store |
-
-**`json` is not a package.** It has been compiled into PHP since 8.0, so it is already present.
-
-**`ca-certificates` is the one that gets forgotten**, and without it the build dies on `certificate verify failed` when wp-cli reaches `api.wordpress.org`. Many published Dockerfiles never list it and still work, because they omit `--no-install-recommends` and `libcurl4` carries `Recommends: ca-certificates`. See § 06 c.
-
-</details>
-
-<br>
-
-<details>
-<summary><b>(www.conf, Dockerfile) The two Debian defaults that are wrong</b></summary>
-
-<br>
-
-**Debian configures php-fpm for a web server sitting on the same machine.** Both of those assumptions break inside a container.
-
-**1. It listens on a Unix socket.**
-
-```
-/etc/php/8.2/fpm/pool.d/www.conf:41
-listen = /run/php/php8.2-fpm.sock
+```text
+www.conf     [www]  listen = /run/php/php8.2-fpm.sock
+www2.conf    [www]  listen = 0.0.0.0:9000
 ```
 
-A Unix socket is a filesystem object. nginx lives in a different mount namespace, so that path simply does not exist for it. `listen = 9000` binds a TCP port instead, which the docker network can route.
+The `[www]` header is required so PHP-FPM knows which pool the setting belongs to.
 
-> Measured: `listen = 9000` binds `[::]:9000`, not `0.0.0.0:9000`. `/proc/net/tcp` stays empty and the socket shows up in `/proc/net/tcp6`. IPv4 clients still reach it through dual-stack. Write `listen = 0.0.0.0:9000` to make it explicit.
+**The filename matters.** An earlier attempt used `www-listen.conf`, which sorts before `www.conf`. Debian's socket setting then won. `www2.conf` sorts after it, so the TCP setting wins.
 
-**2. It daemonises.**
-
-```
-/etc/php/8.2/fpm/php-fpm.conf:101
-;daemonize = yes
-```
-
-The line is commented out and the built-in default is `yes`, so php-fpm would fork, the parent would exit, and PID 1 would be gone. `php-fpm8.2 -F` keeps it in the foreground. § 06 e covers why that matters.
-
-**The port is never published to the host.** Only the docker network reaches 9000, which is what keeps nginx the sole entrypoint.
-
-</details>
-
-<br>
-
-<details>
-<summary><b>(www.conf) Overriding one line, mariadb-style</b></summary>
-
-<br>
-
-**`pool.d/` behaves like `mariadb.conf.d/` from § 10 c.** Every `*.conf` file in it is included, and two files can declare the same pool name. So instead of replacing the whole shipped `www.conf`, a second file can carry just the one directive that is wrong:
-
-```
-www.conf     [www]  user=www-data  group=www-data  pm=dynamic ...  listen=/run/php/...sock
-www2.conf    [www]  listen=9000
-```
-
-**Measured: declaring `[www]` twice is not an error.** Whichever file loads *last* wins for any directive it repeats, and everything it does not repeat survives from the other file. Same rule as MariaDB's *"if an option is set multiple times, the later setting will override the earlier setting."*
-
-**The `[www]` header is not optional**, even for a one-line file. Without it `listen` belongs to no pool, and php-fpm refuses to start with `unknown entry 'listen'`.
-
-<br>
-
-**"Later" means alphabetically later, and that is easy to get backwards.** The first attempt named the file `www-listen.conf`, expecting it to load after `www.conf`. It loads before it: in ASCII `-` is 0x2D and `.` is 0x2E. The shipped file was then read last, its Unix-socket `listen` won, and the override was silently discarded:
-
-```
-$ php-fpm8.2 -tt | grep listen
-listen = /run/php/php8.2-fpm.sock     ← the override never took effect
-```
-
-**No error anywhere.** `php-fpm -t` reports success and the master starts normally, because nothing is invalid, it just resolves to the wrong value.
-
-**The fix is the filename, not the content.** `www2.conf` sorts after `www.conf` (`2` is 0x32), so it loads second and its `listen = 0.0.0.0:9000` is the one that survives.
-
-</details>
-
-<br>
-
-<details>
-<summary><b>(Dockerfile) WordPress core does not come from apt</b></summary>
-
-<br>
-
-**`apt-get install wordpress` is the wrong instinct**, for two reasons. The version is frozen at whatever the release shipped with (`6.1.9+dfsg1-0+deb12u1`), and it drags `apache2` plus `libapache2-mod-php8.2` into a container that already has nginx in front of it.
-
-**Core is source code, not a package.** It comes from `wordpress.org`, or from `wp core download`, which verifies the md5 of the tarball itself.
-
-</details>
-
-<br>
-
-<details>
-<summary><b>(Dockerfile, entrypoint.sh) wp-cli</b></summary>
-
-<br>
-
-**wp-cli is a PHP program that loads WordPress core and calls its functions directly.** It ships as a `.phar`, a PHP Archive, which is an entire application packed into one executable file.
-
-**It needs no web server, and that is the property the container depends on.** Nothing is listening while the entrypoint runs, yet `wp core install` can still create the tables and the accounts, because it is executing the same WordPress code a request would have executed.
-
-```
-a normal request    browser → nginx → php-fpm → WordPress code → mariadb
-wp-cli                                php CLI → WordPress code → mariadb
-```
-
-**`--allow-root` is not optional here.** wp-cli refuses UID 0 by default, and the reason is code execution, not file ownership: commands like `wp plugin install --activate` run third-party PHP that inherits wp-cli's privileges. The entrypoint has no other user to run as, so the flag has to be there.
-
-</details>
-
-<br>
-
-<details>
-<summary><b>(Dockerfile, entrypoint.sh) Build time and run time</b></summary>
-
-<br>
-
-**"Installing WordPress" is three separate operations, and they do not belong in the same place:**
-
-| operation | needs | when |
-|:--|:--|:--|
-| `wp core download` | network | build time |
-| `wp config create` | the database password | run time |
-| `wp core install` | a reachable mariadb | run time |
-
-**The last two are impossible during a build.** Secrets are mounted at `/run/secrets/` only when the container starts, and no database exists while the image is being built.
-
-**Downloading core at build time still reaches the volume**, because of copy-up:
-
-> "If you mount an *empty volume* into a directory in the container in which files or directories exist, these files or directories are propagated (copied) into the volume by default."
-
-**It happens exactly once.** The same page continues: *"If you mount a non-empty volume [...] the pre-existing files are obscured by the mount."* Once `/home/login/data/wordpress` holds anything, rebuilding the image will never refresh it. That is correct behaviour for a CMS, since the volume owns the content, but it is also why the entrypoint still needs a guard of its own.
-
-</details>
-
-<br>
-
-<details>
-<summary><b>(entrypoint.sh) What the entrypoint must do</b></summary>
-
-<br>
-
-**Same reasoning as § 10 c.** A `RUN` finishes at build time, while the secrets and the database only exist at run time, so configuration can only happen when the container starts.
-
-1. **Read the passwords from `/run/secrets/`.** They are files, not environment variables, so nothing in `docker inspect` or `/proc/1/environ` reveals them.
-
-**Three secret files, read in two different ways.** The wordpress container needs the database password *and* the two WordPress account passwords, and they are not shaped the same:
-
-| File | Contains | Read with |
-|:--|:--|:--|
-| `db_password` | one opaque value, no key, no newline meaning | `DB_PASSWORD=$(cat /run/secrets/db_password)` |
-| `credentials` | `KEY=value` lines: `ADMIN_PASSWORD`, `USER_PASSWORD` | `source /run/secrets/credentials` |
-
-**`cat` gives a string, `source` defines variables.** `credentials` is not a value, it is a fragment of shell script, so `source` runs it and both variables exist afterwards. That is also why it must contain nothing but assignments: anything else in it executes as root.
-
-**`db_root_password` is not mounted here.** A service sees a secret only if it lists it, so wordpress never receives the root password at all.
-
-2. **Wait for mariadb.** `depends_on` only waits for the mariadb *container* to start, not for `mariadbd` to finish its first-boot setup (`mariadb-install-db`, then the init SQL). Connecting too early fails. A bounded retry that gives up after a set number of attempts is not an infinite loop.
+Check the effective configuration with:
 
 ```bash
-(exec 3<>/dev/tcp/$DB_HOST/3306) 2>/dev/null
+php-fpm8.2 -tt 2>&1 | grep 'listen ='
 ```
 
-**No extra package needed to check it.** Neither `mysql-client` nor `netcat` is installed, and neither has to be. `/dev/tcp/host/port` is a bash built-in redirection target: it opens a real TCP connection, exit code 0 if something is listening. `2>/dev/null` silences the "Connection refused" message without affecting the exit code.
+Using `listen = 9000` can create a dual-stack IPv6 listener. The explicit `0.0.0.0:9000` selects IPv4.
 
-3. **Guard on `wp-config.php`.** Same shape as `[ ! -d /var/lib/mysql/mysql ]`: first boot configures, every later boot must leave existing content alone.
+### Build time and run time
 
-4. **First boot only:** `wp config create`, then `wp core install`, then `wp user create` for the second account.
+| Operation | When in this project | Why |
+|:--|:--|:--|
+| `wp core download` | build time | puts the application files in the image |
+| `wp config create` | run time | uses the supplied database settings and password |
+| `wp core install` | run time | creates tables and an administrator in the running database |
 
-**WordPress needs two accounts, including an administrator.** The administrator's username must not contain `admin` or `administrator`, including their case variants.
+WP-CLI executes PHP directly, so installation needs a database connection but no running nginx or PHP-FPM server.
 
-**"Contain" is the operative word**, so `admin-123` and `wpadmin` both fail, not only the exact word. `wp core install --admin_user=` creates the first account, `wp user create` the second.
+**An empty volume receives the image's existing files by default**, unless copying is disabled with `nocopy`. A non-empty volume hides the image's files at that path. Rebuilding the image therefore does not replace an existing WordPress installation in the volume.
 
-5. **End with `exec "$@"`**, so php-fpm replaces the script and becomes PID 1.
+[Docker: Mounting volumes over existing data](https://docs.docker.com/engine/storage/volumes/#mounting-a-volume-over-existing-data) · [WP-CLI: Create configuration](https://developer.wordpress.org/cli/commands/config/create/) · [WP-CLI: Install WordPress](https://developer.wordpress.org/cli/commands/core/install/)
 
-</details>
+### Secrets and file ownership
 
-<br>
+**`cat` reads a value; `source` executes shell assignments.** The `credentials` file must contain trusted assignments such as `ADMIN_PASSWORD=...` and `USER_PASSWORD=...`. This service does not receive `db_root_password`.
 
-<details>
-<summary><b>(Dockerfile) Ownership</b></summary>
+The PHP-FPM master starts as root, while its workers run as `www-data`. The build's `chown` lets those workers write to the WordPress files; without suitable permissions, uploads and updates fail.
 
-<br>
-
-**The php-fpm master starts as root and drops its workers to `www-data`:**
-
-```
-/etc/php/8.2/fpm/pool.d/www.conf:28
-user  = www-data
-group = www-data
-```
-
-**Those workers are what executes WordPress**, and WordPress writes into `wp-content/uploads`. Anything a `RUN` downloaded is owned by root, so the tree has to be handed over:
-
-```
-chown -R www-data:www-data /var/www/html
-```
-
-**Skipping it fails silently.** The site loads, because reading is allowed. Uploads, plugin installs and updates are the things that break.
-
-**UID 33 then appears on the host.** As § 06 f says, UIDs cross the boundary unchanged, and copy-up preserves them, so `ls -l /home/login/data/wordpress` shows UID 33 rather than `login`. That is correct, not a bug.
+With Docker's usual rootful setup and no user namespace remapping, `www-data`'s UID 33 also appears on the host. Volume copying preserves file ownership; see § 06 f.
 
 </details>
 
@@ -2143,102 +2090,11 @@ chown -R www-data:www-data /var/www/html
 <details>
 <summary><h1>12 · nginx</h1></summary>
 
-
-<a id="a--what-nginx-is"></a>
-<details>
-<summary><h2>a · What nginx is</h2></summary>
-
-
 > **nginx is a web server: a daemon that listens on a TCP port, speaks HTTP, and answers each request either with a file from disk or with a response produced by another program.**
 
-**A web server exists because a browser cannot read a disk.** The browser only knows how to open a TCP connection and send an HTTP request. Something on the other side has to accept that connection, parse the request, decide what the requested path means, and write an HTTP response back. That is the whole job.
-
-**nginx answers a request in one of two ways.** Either the path maps to a file it can read and send as is, or the path maps to something it cannot produce itself, in which case it forwards the request to a process that can, and relays the answer:
-
-```
-GET /style.css   ──►  nginx reads the file           ──►  200 + bytes
-GET /index.php   ──►  nginx cannot execute PHP
-                      forwards to php-fpm            ──►  200 + generated HTML
-```
-
-**The second case is why the WordPress container exists.** As § 11 says, php-fpm executes PHP but does not speak HTTP, and nginx speaks HTTP but cannot execute PHP. Neither is a complete website on its own.
-
-<br>
-
-**In this project nginx has one more job: it is the only door.**
-
-```
-browser ──HTTPS 443──► nginx ──┬── static files from the volume
-                               │
-                               └── FastCGI 9000 ──► wordpress ──► mariadb
-```
-
-**Only nginx has a published port.** Everything else is reachable by container name inside the Docker network and by nothing on the host, which is what the subject means by a single entrypoint.
-
-**nginx also terminates TLS.** The encrypted connection ends at nginx: it holds the certificate and the private key, decrypts the request, and everything it forwards afterwards travels as plain traffic inside the private network. WordPress and MariaDB never handle a certificate.
-
-</details>
-
-<a id="b--the-configuration-files"></a>
+<a id="a--tls-and-the-certificate"></a>
 <details>
-<summary><h2>b · The configuration files</h2></summary>
-
-
-**nginx reads exactly one file: `/etc/nginx/nginx.conf`.** Every other file it uses is pulled in because that one names it. There is no directory the daemon scans on its own.
-
-**The file is a tree of contexts.** A context is a block that scopes directives, and a directive is only legal inside certain contexts:
-
-```text
-main            user, worker_processes, pid        ← no braces, the file itself
-├── events {}   how workers accept connections
-└── http {}     everything HTTP
-    └── server {}      one virtual host
-        └── location {}    one URL path
-```
-
-**Settings inherit downward** unless the inner context redefines them. That is why an `ssl_protocols` written once in `http` applies to every `server` block underneath it.
-
-**`include` is textual insertion at the point where it appears**, and the nginx documentation gives its context as `any`. Debian's `nginx.conf` uses it twice, both times *inside* `http`:
-
-```nginx
-include /etc/nginx/conf.d/*.conf;
-include /etc/nginx/sites-enabled/*;
-```
-
-**So an included file may only contain http-level directives**, which in practice means `server` blocks. That is why a site file starts directly with `server {` and never repeats `http {`.
-
-<br>
-
-**`conf.d` and `sites-enabled` are the same thing to nginx.** The split is a Debian packaging convention, not an nginx feature:
-
-```text
-sites-available/   every site you have written
-sites-enabled/     symlinks to the ones currently active   ← enable = ln -s, disable = rm
-conf.d/            fragments that are always on
-```
-
-**nginx reads both, in that order, and merges the `server` blocks into one list.** Selection then happens per request: `listen` first, then the `Host` header against `server_name`, with unmatched requests going to that port's default server.
-
-**Two things in the packaged file matter directly here:**
-
-- `ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;` the default permits two protocols the subject forbids. The `server` block must redefine it.
-- `include /etc/nginx/sites-enabled/*;` picks up `default`, which owns port 80. Deleting that symlink is what removes it.
-
-**Duplicating a directive in one context is fatal, not a silent override.** Measured on the `nginx` 1.22.1-9+deb12u9 package:
-
-```
-"root" directive is duplicate in /etc/nginx/conf.d/a.conf:1
-nginx: configuration file /etc/nginx/nginx.conf test failed
-```
-
-**That is the opposite of `mariadb.conf.d/` and php-fpm's `pool.d/`**, § 10 c and § 11 b, where the later file quietly wins. Here two `server` blocks coexist and are chosen by address, while two identical directives in one block refuse to start.
-
-</details>
-
-
-<a id="c--tls-and-the-certificate"></a>
-<details>
-<summary><h2>c · TLS and the certificate</h2></summary>
+<summary><h2>a · TLS and the certificate</h2></summary>
 
 
 **nginx cannot serve HTTPS without two files**, and the image has to produce them itself:
@@ -2405,9 +2261,9 @@ The extension is convention only. nginx decides what a file is by which directiv
 
 </details>
 
-<a id="d--the-nginx-container"></a>
+<a id="b--the-nginx-container"></a>
 <details>
-<summary><h2>d · The nginx container</h2></summary>
+<summary><h2>b · The nginx container</h2></summary>
 
 
 **Two files build this service**, one fewer than the other two, because nothing here needs to happen at run time:
@@ -2447,7 +2303,7 @@ ENTRYPOINT ["nginx", "-g", "daemon off;"]
 
 **`openssl` is not in the base image.** Measured on `debian:bookworm`: no `openssl` binary and no such package installed, only the `libssl3` library. It has to be installed alongside nginx.
 
-**`rm /etc/nginx/sites-enabled/default` removes the packaged site**, which owns port 80 as its default server, as § 12 b explains. Deleting one symlink is preferable to editing the packaged `nginx.conf`, and it belongs in the same `RUN` for the whiteout reason in § 06 c.
+**`rm /etc/nginx/sites-enabled/default` removes the packaged site**, which owns port 80 as its default server. Deleting one symlink is preferable to editing the packaged `nginx.conf`, and it belongs in the same `RUN` for the whiteout reason in § 06 c.
 
 **The `COPY` comes last on purpose.** `default.conf` is the file that gets edited over and over, and every edit invalidates the cache for everything below it. Placed above the certificate `RUN`, each edit would regenerate a fresh key pair. Whatever changes most often goes last.
 
@@ -2503,7 +2359,7 @@ server {
         PEM_read_bio_X509_AUX() failed ... Expecting: TRUSTED CERTIFICATE
 ```
 
-**`include snippets/fastcgi-php.conf;` ships with the Debian package**, and it is what supplies the FastCGI parameters § 11 a describes:
+**`include snippets/fastcgi-php.conf;` ships with the Debian package**, and it supplies the FastCGI parameters described in the [php-fpm deep dive](#wordpress-php-fpm-and-fastcgi):
 
 ```
 fastcgi_split_path_info ^(.+?\.php)(/.*)$;
@@ -2538,7 +2394,7 @@ nginx:
 
 **`ports:` appears exactly once in the whole file.** That single mapping is what makes nginx the only entrypoint. mariadb's 3306 and php-fpm's 9000 are bound inside their own network namespaces and reachable only from the `inception` network.
 
-**The volume is mounted a second time here**, the same named volume wordpress uses. § 11 b explains why: FastCGI sends a path, not code, so both containers must see the same files at the same path.
+**The volume is mounted a second time here**, the same named volume wordpress uses. § 11 c explains why: FastCGI sends a path, not code, so both containers must see the same files at the same path.
 
 **`depends_on` is not optional for nginx**, and the reason is different from wordpress's. nginx resolves `fastcgi_pass wordpress:9000` while parsing its configuration, at startup, not per request. If the wordpress container does not exist yet, the name does not resolve and nginx refuses to start:
 
@@ -2583,818 +2439,6 @@ nginx container
 
 </details>
 
-
-</details>
-
-<a id="13--the-makefile"></a>
-<details>
-<summary><h1>13 · The Makefile</h1></summary>
-
-
-> **The Makefile is the only thing you need to Run. Everything else is reached through it.**
-
-**So `make` calls Compose, and Compose calls the Dockerfiles.** Nothing is built by hand, and no `docker build` is ever typed.
-
-<br>
-
-**There is one thing Compose cannot do for itself, and it is the reason `up` has a prerequisite.** As § 07 c shows, `type: none` creates no directory: if `/home/login/data/mariadb` is missing, the volume fails to mount and the container never starts. The Makefile has to create both directories first.
-
-```make
-COMPOSE		= docker compose -f srcs/docker-compose.yml
-DATA_DIR	= /home/login/data
-VOLUMES		= $(DATA_DIR)/mariadb $(DATA_DIR)/wordpress
-
-all: up
-
-$(VOLUMES):
-	mkdir -p $@
-
-up: $(VOLUMES)
-	$(COMPOSE) up -d --build
-```
-
-**`$(VOLUMES)` is a real target, not a phony one.** Each name is a directory on disk, so `make` runs `mkdir -p` only when the directory is missing and skips it otherwise. `$@` expands to whichever one is being built.
-
-<br>
-
-**`clean` and `fclean` must be different, and mixing them destroys the database:**
-
-```
-down     stop and remove the containers and the network
-clean    the above, plus the images this project built  (--rmi local)
-fclean   the above, plus the volumes and the host data  (down -v)
-```
-
-**`docker compose down` keeps volumes. `down -v` deletes them.** So `clean` can be run freely, while `fclean` is the one that wipes WordPress and starts the stack from nothing.
-
-**`fclean` is also the only place `sudo` is justified.** The files under `data/` were written by the container processes after they dropped privileges, so they are owned by UID 999 (`mysql`) and UID 33 (`www-data`), as § 06 f explains. Your own account cannot delete them.
-
-**No `sudo` anywhere else.** Being in the `docker` group is already enough to reach the socket, and `sudo mkdir` would create the data directories owned by root.
-
-</details>
-
-<a id="14--bonus"></a>
-<details>
-<summary><h1>14 · Bonus</h1></summary>
-
-
-> **The bonus part is five extra services, each one an additional container built from its own Dockerfile.**
-
-**Each bonus service is worth one point, and each one follows the same pattern already used three times:** a directory under `srcs/requirements/`, one Dockerfile on the same Debian base, a real foreground daemon as PID 1, a service in `docker-compose.yml` on the `inception` network, and a named volume only if it has state to keep.
-
-```text
-srcs/requirements/
-├── mariadb/        mandatory
-├── wordpress/      mandatory
-├── nginx/          mandatory
-└── bonus/
-    ├── static/
-    ├── adminer/
-    └── redis/
-```
-
-**The order below is my build order, easiest first, not the order the subject lists them in.**
-
-| Container | Time | What makes it that |
-|:--|:--|:--|
-| **static site** | 30 to 60 min | one nginx, or any non-PHP server, on its own port. A few HTML and CSS files, no state, no secrets |
-| **adminer** | 1 to 2 h | one PHP file to download, and the php-fpm knowledge from § 11 reused as is. The only new decision is whether it gets its own nginx or a `location` in the existing one |
-| **redis** | 2 to 3 h | `redis-server` in the foreground is trivial. The work is on the WordPress side, installing and configuring the object cache plugin so it actually connects |
-| **free choice** | varies | cheapest is a small monitoring or exporter service. Whatever it is, it has to be justified in one sentence at the defense |
-
-<br>
-
-
-<a id="a--a-static-website"></a>
-<details>
-<summary><h2>a · A static website</h2></summary>
-
-
-> **A static website is a site whose files are sent to the browser exactly as they are stored on disk, with no code executed on the server.**
-
-**The server does one thing: map a URL to a file and send it.** No interpreter runs, no database is queried, nothing is generated per request. This is the opposite of WordPress, where every `.php` request is handed to php-fpm, which executes code and builds the page.
-
-**The static-site bonus excludes PHP.** HTML, CSS, and browser-side JavaScript satisfy that constraint. The container serves the files.
-
-<br>
-
-**So the container is the smallest one in the project:** nginx, a configuration file, and the files themselves.
-
-```text
-srcs/requirements/bonus/resume/
-├── Dockerfile
-├── conf/
-│   └── default.conf
-└── srcs/
-    ├── index.html
-    └── style.css
-```
-
-**No volume, no secret, no environment variable, no `depends_on`.** The site has no state to keep and talks to nothing, so the files are baked into the image with `COPY` rather than mounted. Rebuilding the image is how the site is updated.
-
-<br>
-
-
-<details>
-<summary><b>The Dockerfile</b></summary>
-
-<br>
-
-```dockerfile
-FROM debian:bookworm
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends nginx \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm /etc/nginx/sites-enabled/default
-
-COPY conf/default.conf /etc/nginx/conf.d/
-
-COPY ./srcs/ /var/www/static
-
-ENTRYPOINT [ "nginx", "-g", "daemon off;" ]
-```
-
-**`rm /etc/nginx/sites-enabled/default` is not optional here either.** The Debian package ships a `server` block that claims port 80 as `default_server` with `root /var/www/html`, and `nginx.conf` includes it alongside `conf.d/`. Left in place, it either collides with my own block, or wins and serves the welcome page:
-
-```text
-nginx: [emerg] a duplicate default server for 0.0.0.0:80
-```
-
-**Every line of a multi-line `RUN` ends with `\` except the last one.** Getting this wrong is silent in one direction and fatal in the other:
-
-| Mistake | What actually happens |
-|:--|:--|
-| `\` left on the last line | the next instruction is swallowed into the `RUN`, so `rm -rf /var/lib/apt/lists/* COPY conf/default.conf /etc/nginx/conf.d/` runs and deletes `conf.d/`. BuildKit only warns: `NoEmptyContinuation` |
-| `\` missing on a middle line | the next line starts with `&&`, which is not an instruction: `unknown instruction: &&` |
-
-**`COPY ./srcs/ /var/www/static` copies the directory, not a glob.** Writing `COPY ./srcs/* /var/www/static` looks equivalent and is not: the shell-style glob expands to each entry, and the contents of each subdirectory are copied into the destination, flattening the tree. Measured:
-
-```text
-srcs/index.html        ->  /var/www/static/index.html
-srcs/css/style.css     ->  /var/www/static/style.css     the css/ directory is gone
-```
-
-Every `<link href="css/style.css">` would then return 404.
-
-</details>
-
-
-<details>
-<summary><b>The server block</b></summary>
-
-<br>
-
-```nginx
-server {
-	listen 4242;
-	listen [::]:4242;
-
-	server_name login.resume.42.fr;
-
-	root /var/www/static/;
-
-	index index.html;
-}
-```
-
-**`root` is the mapping, and it is the only thing nginx needs to serve a file.** The path opened for a request is `root` plus the request URI, so `GET /style.css` reads `/var/www/static/style.css`. nginx has a compiled-in default of `root html;`, relative to the prefix, which is why an untouched nginx serves a welcome page at all.
-
-**`index` is separate from `root`.** It only decides which file answers a URI ending in `/`, so `GET /` becomes `/var/www/static/index.html`.
-
-**`server_name` is decorative in this container.** It selects between competing `server` blocks listening on the same address and port, and this container has exactly one block, so every request lands here whatever the `Host` header says. For the name to work in a browser it also has to resolve, which means a line on the host:
-
-```text
-127.0.0.1       login.42.fr login.resume.42.fr
-```
-
-**No `try_files` is needed.** The static file module already returns 404 when the file is missing. `try_files $uri $uri/ =404;` makes that explicit and matters once there are rewrites, which there are none of here.
-
-</details>
-
-
-<details>
-<summary><b>The Compose service</b></summary>
-
-<br>
-
-```yaml
-  resume:
-    image: resume:1.0
-    build: ./requirements/bonus/resume
-    networks: [inception]
-    restart: unless-stopped
-    ports: ["4242:4242"]
-```
-
-**Port 80 inside the container would have been fine too.** Each container has its own network namespace, so it has its own set of port numbers: the resume container's port 80 and the mandatory nginx's port 80 are two different things and cannot collide.
-
-**What must not be taken is host port 80.** The subject makes nginx the only entrypoint on 443, so an open port 80 on the host reads as a second, plain HTTP entrypoint into the infrastructure. Publishing `4242:4242` keeps the mandatory rule intact and still reaches the site.
-
-</details>
-
-</details>
-
----
-
-
-<a id="b--adminer"></a>
-<details>
-<summary><h2>b · Adminer</h2></summary>
-
-
-> **Adminer is a database administration tool that ships as a single PHP file: it connects to a database server and exposes it as a web interface.**
-
-**It exists to replace a terminal client.** Instead of `mariadb -u wp_user -p` and typing SQL, the browser shows the databases, the tables, the rows, and lets them be edited. For this project it is a way to inspect the WordPress database.
-
-**Adminer is PHP, and that decides the architecture of the container.** PHP is not a server: something has to receive the HTTP request, and something has to execute the code. Those are two different programs, exactly as in § 11:
-
-```text
-browser --HTTP--> web server --FastCGI--> php-fpm --> adminer.php --> mariadb
-```
-
-**One container cannot run both**, because a container runs a single foreground daemon as PID 1. So the Adminer container runs php-fpm only, and the web server in front of it is the mandatory nginx, which gains one `location`:
-
-```nginx
-location /adminer/ {
-    fastcgi_pass adminer:9000;
-}
-```
-
-**The consequence to think about is `SCRIPT_FILENAME`.** nginx does not open the PHP file, it sends a path to php-fpm, and php-fpm opens that path inside *its own* filesystem. So the path has to be correct in the Adminer container, not in nginx.
-
-**Implementation to be written.**
-
-</details>
-
----
-
-
-<a id="c--redis-cache"></a>
-<details>
-<summary><h2>c · redis cache</h2></summary>
-
-
-> **Redis is an in-memory key value data store: a server process that keeps data in RAM, addresses it by string keys, and answers over TCP on port 6379.**
-
-**It exists because RAM is orders of magnitude faster than a database query.** A SQL query has to be parsed, planned, executed against indexes, and read from disk or from the database's own buffer pool. A Redis lookup is a hash table read in a process that never touches the disk. Anything expensive to compute and cheap to lose belongs in front of the database, not in it.
-
-**WordPress is exactly the workload this helps.** A single page load issues dozens of queries for the same rows: the site options, the active theme, the post objects, the user meta. With Redis in front, WordPress asks Redis first and only falls back to MariaDB on a miss, storing the answer for the next request.
-
-```text
-without redis                     with redis
-wordpress                         wordpress
-   │ SQL, every request              │ GET key
-   ▼                                 ▼            miss only
-mariadb                            redis ──────────────> mariadb
-```
-
-<br>
-
-**Two distinctions matter more than the commands.**
-
-**Redis is not a manager of the cache, it is the cache.** The server holds the values and executes `GET`, `SET`, and expiry. What to store, under which key, for how long, and when to fall back to MariaDB is decided by the WordPress side, not by Redis.
-
-**MariaDB is the source of truth, Redis is a copy.** Losing the entire Redis dataset costs a slower next page load and nothing else. That is why this container gets no volume, while mariadb cannot work without one.
-
-**Redis and MariaDB never talk to each other.** There is no replication and no connection between the two containers. WordPress is the only link, and consistency exists only because WordPress overwrites or deletes the cached key when it updates the row.
-
-```text
-wordpress ──> redis      (fast copy)
-    └───────> mariadb    (source of truth)
-```
-
-<br>
-
-
-<details>
-<summary><b>DEEPDIVE · the concepts behind the cache</b></summary>
-
-<br>
-
-**A key value store is the simplest database model there is.** There are no tables, no columns, no schema, and no joins. There is one flat namespace of keys, each holding one value, and the only questions the server can answer are "what is at this key" and "put this at this key".
-
-```text
-relational                        key value
-┌───────────────────────┐         ┌──────────────────────────────────┐
-│ wp_options            │         │ wordpress:options:alloptions  -> │
-│  option_id  name  val │         │ wordpress:posts:42            -> │
-│  1  siteurl  ...      │         │ wordpress:users:1             -> │
-└───────────────────────┘         └──────────────────────────────────┘
- query planner, indexes,           hash table lookup
- joins, disk pages
-```
-
-**The value is a byte string as far as the cache is concerned.** WordPress serialises a PHP array or object into a string, stores it, and unserialises it on the way back. Redis itself also has richer types, lists, hashes, sets, sorted sets, but the object cache only needs strings.
-
-<br>
-
-**In memory is the whole point, and the whole risk.** The dataset lives in the process address space, so a restart of the container loses it. Redis can persist to disk, and understanding the two mechanisms is worth it even though this project uses neither:
-
-| Mechanism | What it does |
-|:--|:--|
-| **RDB** | writes a point in time snapshot of the whole dataset to a file, every N seconds or on demand |
-| **AOF** | appends every write command to a log file, replayed at startup to rebuild the dataset |
-
-**Neither is wanted here.** Persistence would mean a volume, disk writes on every cached value, and a cache that outlives the database it mirrors. A cold cache after a restart is the correct behaviour: WordPress simply queries MariaDB and refills it.
-
-<br>
-
-**Keys can expire, and expiry is what keeps a cache from becoming stale.** A key set with a TTL is deleted automatically once the time is up, so cached data has a lifetime instead of living forever.
-
-```text
-SET key value EX 300      the key disappears 300 seconds later
-TTL key                   how many seconds remain
-```
-
-**Redis does not scan the whole keyspace looking for expired keys.** It removes them lazily, when a key is accessed and found to be expired, and also samples random keys periodically in the background. The effect is that expired keys stop being visible immediately, while the memory they used is reclaimed slightly later.
-
-<br>
-
-**Eviction is different from expiry, and this is the distinction people get wrong.** Expiry is a deadline the writer chose. Eviction is what the server does when it runs out of the memory it was allowed, regardless of any deadline.
-
-```text
-maxmemory           the limit. Default 0, meaning no limit on 64 bit systems
-maxmemory-policy    what to delete when the limit is reached
-```
-
-**With the default policy, `noeviction`, nothing is deleted and writes start failing with an error while reads keep working.** That is the right default for a data store and the wrong one for a cache, where the usual choice is:
-
-```text
-maxmemory 256mb
-maxmemory-policy allkeys-lru
-```
-
-**`allkeys-lru` evicts the least recently used key**, which is the sensible default when a small subset of the data is read far more often than the rest. The `volatile-*` policies only consider keys that carry a TTL, and behave like `noeviction` when no key has one. Redis approximates LRU by sampling a handful of random keys rather than maintaining an exact ordering, because exact LRU costs more memory than it saves.
-
-<br>
-
-**On the WordPress side, the object cache is the mechanism being replaced.** WordPress already has one, `WP_Object_Cache`, and it is non persistent: it holds values in PHP memory for the duration of a single request and throws them away when the request ends. Two requests for the same page each query MariaDB from scratch.
-
-**A drop-in replaces it.** A file named `object-cache.php` placed in `wp-content/` is loaded by WordPress instead of the built in class, and every `wp_cache_get()` and `wp_cache_set()` call then goes to Redis. Plugin code does not change, because plugins call those functions rather than the class.
-
-```text
-wp_cache_get( 'alloptions', 'options' )
-        │
-        ▼
-wp-content/object-cache.php        the drop in
-        │
-        ▼
-redis:6379
-```
-
-**Transients follow automatically.** Without a persistent object cache, `set_transient()` writes to the `wp_options` table, which means the "cache" is another row in the database. With one installed, transients use the `wp_cache_*` functions instead, so they land in Redis.
-
-<br>
-
-**Version note.** Debian 12 Bookworm packages `redis-server` 5:7.0.15-1~deb12u9, measured with `apt-cache policy` in a throwaway `debian:bookworm` container. The eviction policies above are documented for Redis 7 and later.
-
-<br>
-
-Sources:
-* https://redis.io/docs/latest/develop/reference/eviction/
-* https://developer.wordpress.org/reference/classes/wp_object_cache/
-* https://developer.wordpress.org/apis/transients/
-
-</details>
-
-
-<details>
-<summary><b>The redis container</b></summary>
-
-<br>
-
-```dockerfile
-FROM debian:bookworm
-
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y redis-server redis-tools \
-    && rm -rf /var/lib/apt/lists/*
-
-ENTRYPOINT [ "redis-server", "--protected-mode", "no", \
-             "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru" ]
-```
-
-**This is the smallest container in the project and it has no configuration file at all.** That is deliberate, and it works because of one detail: `redis-server` reads `/etc/redis/redis.conf` **only when the path is given as its first argument**. No argument is given, so the packaged file is ignored and the server starts from its built-in defaults, which every command line flag then overrides.
-
-**That matters, because Debian's packaged file is hostile to containers.** Measured inside a throwaway `debian:bookworm` with `redis-server` installed:
-
-| Packaged setting | What it would do here |
-|:--|:--|
-| `daemonize yes` | PID 1 would fork and the parent exit, so the container stops immediately |
-| `bind 127.0.0.1 -::1` | only loopback inside its own network namespace, so wordpress could never connect |
-| `protected-mode yes` | refuses connections from outside loopback when no password is set |
-
-**`--protected-mode no` is safe here only because of the network.** Redis has no password and would be wide open, but the service publishes no port, so it exists only on the `inception` network and nothing outside Docker can reach it. Publishing `6379` would put an unauthenticated database on the host.
-
-**The two memory flags are the answer to "how do you manage the cache".** Built-in defaults are `maxmemory 0`, no limit, and `noeviction`, which means writes start failing once RAM fills instead of old keys being dropped. A ceiling plus `allkeys-lru` is the behaviour a cache is supposed to have.
-
-**`redis-tools` is not needed to run the server.** It provides `redis-cli`, which is how the cache is inspected during a defense:
-
-```text
-redis-cli DBSIZE            how many keys are cached
-redis-cli INFO stats        keyspace_hits and keyspace_misses
-redis-cli CONFIG GET maxmemory-policy
-```
-
-</details>
-
-
-<details>
-<summary><b>The WordPress side</b></summary>
-
-<br>
-
-**Redis alone changes nothing.** WordPress has to be told to use it, and that takes one package in the image and three commands at first boot.
-
-**The package is the PHP extension**, `php8.2-redis`, version 5.3.7+4.3.0-3 in Debian 12. It is the C extension that lets PHP speak RESP. Without it the drop-in loads and immediately fails, because PHP has no `Redis` class.
-
-```dockerfile
-RUN apt-get update && apt-get install -y --no-install-recommends \
-	php8.2-fpm \
-	php8.2-mysql \
-	php8.2-redis \
-	ca-certificates \
-	&& rm -rf /var/lib/apt/lists/*
-```
-
-**The three commands live in the entrypoint, inside the first boot guard:**
-
-```bash
-	wp plugin install redis-cache --activate --allow-root
-	wp config set WP_REDIS_HOST redis --allow-root
-	wp redis enable --allow-root
-```
-
-**Their position in the script is not a detail, it is the whole thing.** Three rules, each learned by breaking it:
-
-| Rule | What happens otherwise |
-|:--|:--|
-| after `wp core install` | the database has no tables yet, so every command that loads WordPress fails with `Error: The site you have requested is not installed.` |
-| inside the `if [ ! -f wp-config.php ]` guard | the plugin is reinstalled over the network on every restart, and one failure turns into a crash loop through `restart: unless-stopped` |
-| `--allow-root` on each | wp-cli refuses: `YIKES! It looks like you're running this as root.` |
-
-**`wp redis enable` is the command that actually does the work.** It writes `wp-content/object-cache.php`, the drop-in. Installing and activating the plugin without it leaves WordPress querying MariaDB for everything.
-
-**`WP_REDIS_PORT` is not set** because the plugin defaults to 6379.
-
-**Verified on a cold boot**, from an empty `/home/login/data`:
-
-```text
-Status: Connected
-Client: PhpRedis (v5.3.7)
-Drop-in: Valid
-DBSIZE 49                        keys present after two page loads
-keyspace_hits 96 / misses 90
-```
-
-</details>
-
-
-<details>
-<summary><b>The Compose service</b></summary>
-
-<br>
-
-```yaml
-  redis:
-    image: redis:1.0
-    build: ./requirements/bonus/redis
-    networks: [inception]
-    restart: unless-stopped
-```
-
-**Four lines, and the absences are the interesting part.** No `ports`, because only nginx is an entrypoint and WordPress reaches Redis by service name on the internal network. No `volumes`, because the dataset is a losable copy. No `env_file` and no `secrets`, because there is nothing to configure and no password.
-
-**`wordpress` gains the dependency**, since its first boot now calls `wp redis enable`, which fails if Redis is unreachable:
-
-```yaml
-    depends_on: [mariadb, redis]
-```
-
-**`depends_on` waits for the container to start, not for the server to be ready.** Redis is listening in well under the time WordPress spends waiting for MariaDB, so no extra wait loop is needed for it.
-
-</details>
-
-
-<details>
-<summary><b>DEEPDIVE · how Redis actually works, and where it came from</b></summary>
-
-<br>
-
-**Redis was written to solve a write rate problem, not a read cache problem.** In 2008 and 2009 Salvatore Sanfilippo, antirez, was running LLOOGG, a real time web analytics service, and MySQL could not keep up with the rate at which page views had to be recorded and re-read. His conclusion was that the working set belonged in memory, and that the database should expose data structures rather than tables.
-
-**Version 0.1 was sent on 10 February 2009 and understood three commands: `set`, `get`, `del`.** The second tarball, around 25 February, coincided with the first public post on Hacker News, with the whole codebase still under 3700 lines of C including comments. The event loop was borrowed from Jim Tcl and reimagined as a command interpreter, which is why the architecture below has been stable for fifteen years: it was there in the first month.
-
-**What it solved, stated plainly:** a data store where an operation costs a hash lookup and a memory write instead of a query plan and a disk seek, and where the client can ask for a list, a set, or a counter instead of assembling one out of rows.
-
-<br>
-
-**The server is a single threaded event loop, and that is a design decision rather than a limitation.**
-
-```text
-        ┌──────────────────────────────────────────────┐
-        │              one thread, one loop            │
-        │                                              │
-   epoll_wait ──> which sockets are readable?          │
-        │                                              │
-        ├──> read bytes from a client socket           │
-        ├──> parse RESP into a command + arguments     │
-        ├──> execute it: hash table lookup, write      │
-        ├──> append the reply to the client's buffer   │
-        └──> write buffers back to sockets, repeat     │
-        └──────────────────────────────────────────────┘
-```
-
-**Measured in the project's own container:**
-
-```text
-redis_version:7.0.15
-multiplexing_api:epoll
-io_threads_active:0
-process_id:1
-```
-
-**`epoll` is the kernel mechanism that makes one thread enough.** Instead of one thread blocking per connection, the process registers thousands of sockets with the kernel and asks a single question: which of these are ready now. The loop then does a tiny amount of work per ready socket.
-
-**Why not threads?** Because the work per command is measured in microseconds and is dominated by memory access, so locking would cost more than it saves. One thread also means commands are executed one at a time, in arrival order, which is why Redis needs no concurrency control: atomicity is a property of the architecture, not a feature bolted on. Redis 6 added `io-threads` for reading and writing sockets only, never for executing commands, and it is off by default, which the measurement above confirms.
-
-<br>
-
-**RESP, the Redis Serialization Protocol, is what travels on TCP port 6379.** It is deliberately human readable, and every part is terminated by `\r\n`.
-
-**A client always sends an array of bulk strings**, the command name first, then its arguments:
-
-```text
-C: *2\r\n$4\r\nLLEN\r\n$6\r\nmylist\r\n
-S: :48293\r\n
-```
-
-**The first byte of a reply identifies its type**, which is what makes the parser trivial:
-
-| Byte | Type | Example |
-|:--|:--|:--|
-| `+` | simple string | `+OK\r\n` |
-| `-` | error | `-ERR unknown command 'asdf'\r\n` |
-| `:` | integer | `:1000\r\n` |
-| `$` | bulk string, length prefixed | `$5\r\nhello\r\n`, and `$-1\r\n` for a missing key |
-| `*` | array | `*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n` |
-
-**Length prefixes are the reason it parses as fast as a binary protocol.** Nothing has to be scanned for delimiters or unescaped: read the number, then read exactly that many bytes.
-
-**Redis also accepts inline commands**, space separated and newline terminated, precisely so that a bare `telnet` or a bash `/dev/tcp` redirection can talk to it. No command starts with `*`, so the server can tell the two forms apart.
-
-<br>
-
-**Inside, the keyspace is a hash table.** Every key of a database lives in one dictionary mapping the key string to a value object, and a second dictionary holds the expiration timestamps of the keys that have one.
-
-```text
-db->dict      "wp:options:alloptions" -> value object
-db->expires   "wp:options:alloptions" -> unix time in ms
-```
-
-**Growing that hash table cannot be allowed to block the loop**, so rehashing is incremental: a new larger table is allocated and buckets are migrated a few at a time, on every subsequent operation, while lookups check both tables. A resize of a dataset with millions of keys therefore never produces a pause.
-
-**Expiration is not a timer per key either.** A key is removed lazily, when something touches it and finds it expired, and a background cycle also samples random keys from `db->expires` and deletes the expired ones. The visible behaviour is exact, an expired key is never returned, while the memory is reclaimed slightly later.
-
-<br>
-
-**Everything above explains the one number that matters for this project:** a `GET` from WordPress costs a socket read, a RESP parse, one hash lookup, and a socket write, with no disk in the path at all. The equivalent `SELECT` against MariaDB costs parsing, planning, index traversal, and potentially a page read. That gap is what the cache buys, and it is also why losing the cache costs nothing but time.
-
-<br>
-
-Sources:
-* https://redis.io/docs/latest/develop/reference/protocol-spec/
-* https://github.com/antirez/historical-redis-versions
-* https://redis.io/docs/latest/operate/oss_and_stack/management/optimization/latency/
-* https://redis.io/docs/latest/commands/info/
-
-</details>
-
-</details>
-
----
-
-
-<a id="d--the-service-of-my-choice"></a>
-<details>
-<summary><h2>d · The service of my choice</h2></summary>
-
-
-> **netdata is a monitoring agent: it reads system metrics straight out of the kernel and serves them as a live dashboard, with no configuration, no agent to install elsewhere, and no external database.**
-
-**Justification for the defense, in one sentence:** the whole stack is invisible once it is running, because `docker ps` says `Up` and nothing else, so netdata answers the question that actually matters when something is slow, which is what the machine is doing with its CPU, memory, disk, and network right now.
-
-<br>
-
-**Metrics do not live in any container's filesystem, they live in the kernel**, exposed through `/proc` and `/sys`. The surprise, covered below, is that a container can already read them without being given anything special, which is why this ends up being the simplest service in the project.
-
-```dockerfile
-FROM debian:bookworm
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends netdata \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY conf/netdata.conf /etc/netdata/netdata.conf
-
-ENTRYPOINT [ "netdata", "-D" ]
-```
-
-```yaml
-  netdata:
-    image: netdata:1.0
-    build: ./requirements/bonus/netdata
-    networks: [inception]
-    ports: ["19999:19999"]
-    restart: unless-stopped
-```
-
-**`-D` keeps it in the foreground**, for the same reason every other daemon in this project needs a flag like it: without it netdata forks, the parent exits, and PID 1 is gone.
-
-<br>
-
-**Five lines, and no mounts at all.** netdata's own documentation asks for the host's `/proc` and `/sys` to be bind mounted in, plus `NETDATA_HOST_PREFIX=/host` to redirect its reads there. This container does neither, because measuring showed that on a normal Docker host it changes nothing.
-
-<br>
-
-
-<details>
-<summary><b>Measured: why this container needs no mounts</b></summary>
-
-<br>
-
-**This started as an assumption, that the mounts plus the prefix are what make host wide metrics possible.** Testing it showed otherwise. Three variants of the same image, each given twelve seconds to settle, then asked for its chart list:
-
-```text
-no mounts, no prefix     charts=257   battery=7   sda=5
-mounts, NO prefix        charts=257   battery=7   sda=5
-mounts + prefix          charts=257   battery=7   sda=5
-```
-
-**Identical.** The container charts the host's disk `sda` and the laptop battery `BAT0` even with no mounts and no environment variable at all.
-
-**The reason is that a container is far less isolated from the kernel's reporting interfaces than the word "namespace" suggests.** Docker gives every container a read only bind of the host's `sysfs`, so `/sys/class/power_supply` is already there. And most of `/proc` is not namespaced at all: the PID namespace changes which `/proc/<pid>` directories are listed, but `/proc/stat`, `/proc/meminfo`, and `/proc/uptime` still report the whole machine, because those files describe the kernel and there is only one kernel.
-
-```text
-namespaced          /proc/<pid>, /proc/net, the process list
-NOT namespaced      /proc/stat, /proc/meminfo, /proc/uptime, /proc/cpuinfo
-```
-
-**The wider lesson is worth more than the setting.** A container is isolated in what it can *change*, far more than in what it can *see*.
-
-</details>
-
-
-<details>
-<summary><b>Bug · overriding one setting silently dropped another</b></summary>
-
-<br>
-
-**netdata's default web port, 19999, is unreachable from outside the container by design.** The Debian package ships this, with the reasoning written next to it:
-
-```ini
-[global]
-	bind socket to IP = 127.0.0.1
-	# Netdata is not designed to be exposed to potentially hostile
-	# networks. See https://github.com/netdata/netdata/issues/164
-```
-
-**Binding to `127.0.0.1` means the kernel only delivers packets that arrived on loopback**, the interface reachable only from inside that same network namespace. A published port maps to the container's real interface, `eth0`, never to its loopback, so a process bound to `127.0.0.1` cannot be reached through `ports:` no matter what is published. `0.0.0.0` is the wildcard meaning every interface, which is what makes a published port actually answer.
-
-**So the fix was one line:**
-
-```ini
-[web]
-    bind to = 0.0.0.0
-```
-
-**Writing only that line broke the container completely**, because `COPY` replaces the whole file rather than merging into it. `run as user = netdata`, which lived under `[global]` in the packaged file, disappeared with it. `strace` on the process showed the consequence exactly:
-
-```text
-setgid(65534)                               nogroup
-setuid(65534)                               nobody, not netdata (999)
-mkdir("/var/lib/netdata/registry", 0770) = -1 EACCES
-```
-
-**With no explicit `run as user`, netdata's internal fallback is `nobody`**, uid 65534, which owns nothing under `/var/lib/netdata`. The daemon wrote a clean `FATAL` line and exited.
-
-**Two things made that failure hard to see.** netdata writes that line to `/var/log/netdata/error.log` and not to stdout, so `docker logs` showed only cheerful startup messages, and `restart: unless-stopped` kept recreating the container underneath every attempt to look inside it.
-
-**The working config restores both settings**, which is the general lesson: a file that replaces a packaged file has to carry every value it does not intend to change, not only the one it does.
-
-```ini
-[global]
-    run as user = netdata
-
-[web]
-    bind to = 0.0.0.0
-```
-
-</details>
-
-
-<details>
-<summary><b>Scope decision · per container graphs were attempted and dropped</b></summary>
-
-<br>
-
-**netdata can also break metrics down per container**, one CPU chart for wordpress, another for mariadb, by reading cgroups and asking the Docker daemon for the names behind them. Getting that working needed considerably more than the dashboard itself:
-
-```yaml
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    pid: host
-```
-
-**Plus an entrypoint script**, because the socket is owned by `root` and a group that the `netdata` user does not belong to, so the container had to look up that group at runtime and join it. Plus `curl` in the image, because netdata's container naming script shells out to it. Even with all of that in place, the per container charts never appeared.
-
-**It was removed rather than pursued**, for three reasons worth being able to say out loud:
-
-| Reason | |
-|:--|:--|
-| the subject does not ask for it | it asks for a useful service, justified at the defense, and host wide monitoring is already that |
-| the cost is real isolation | `pid: host` and the Docker socket would have been the two heaviest privileges in the whole Compose file, for a cosmetic gain |
-| every extra moving part is a thing that can break during a defense | an entrypoint, a runtime group lookup, and an extra package, all to add graphs nobody asked for |
-
-**One false alarm from that attempt is worth keeping**, because it will happen again to anyone who adds `pid: host` to a container:
-
-```bash
-docker exec srcs-netdata-1 cat /proc/1/comm
-# systemd
-```
-
-**That looked like the entrypoint had failed. It had not.** `pid: host` shares the host's entire PID namespace, so `/proc/1` inside the container becomes the host's real init process. The PID 1 check that is correct for every other container in this project silently stops meaning anything the moment that setting is added, and the check that still works is to ask Docker what it considers the main process:
-
-```bash
-docker inspect srcs-netdata-1 --format '{{.Path}} {{.Args}}'
-# netdata [-D]
-```
-
-**With `pid: host` gone, `/proc/1/comm` reports `netdata` again**, and the same check now works uniformly across all seven containers.
-
-</details>
-
-<br>
-
-**Verified on a cold boot**, from an empty `/home/login/data` with every image rebuilt:
-
-```text
-resume 200   wordpress 200   wp-admin 302   adminer 200   netdata 200
-restarts: 0 on all seven containers
-
-PID 1:  mariadbd, php-fpm8.2, nginx, nginx, php-fpm8.2, redis-server, netdata
-```
-
-<br>
-
-
-<details>
-<summary><b>DEEPDIVE · how netdata sees what it sees</b></summary>
-
-<br>
-
-**A process only knows what its own namespaces show it.** A container's `/proc` is not a copy of the host's, it is a view the kernel generates that lists only the processes inside that container's PID namespace, and the interfaces it shows are the ones in its own network namespace. That isolation is the entire point of a container, as § 02 covers, and it is precisely what a monitoring agent has to be given a way around, because a monitor that can only see itself is useless.
-
-<br>
-
-**`/proc` and `/sys` are not files on disk, they are interfaces the kernel exposes at runtime.** Reading `/proc/stat` does not read bytes that someone wrote earlier, it asks the scheduler for the counters it is maintaining right now and gets them formatted as text on the spot. `/sys` does the same for devices: every block device, network interface, thermal sensor, and battery has a directory there, generated live.
-
-```text
-cat /proc/meminfo                              kernel formats memory accounting on every read
-cat /sys/class/net/eth0/statistics/rx_bytes    counter maintained by the network driver
-cat /sys/class/power_supply/BAT0/capacity      value read from the battery controller
-```
-
-**Reading them from inside a container is therefore not reading a copy.** Every read still reaches the kernel and returns what is true at that instant, which is why no data is ever duplicated or stale, and why a container that can open these paths at all sees the real machine behind them.
-
-<br>
-
-**The two privileges that were tried and removed are worth understanding anyway**, because they come up constantly in real infrastructure and both are commonly pasted into Compose files without a second thought.
-
-**`/var/run/docker.sock` is not a filesystem, it is the Docker daemon's API.** Anything that can write to that socket can send the daemon the same HTTP requests the `docker` command sends: list containers, read their stats, and also create containers, mount any host path into them, and run them as root. Mounting it `:ro` does not make the API read only, it only makes the socket file itself read only inside the container, and a socket is written by sending on it, not by writing the file. So `:ro` on a Docker socket buys close to nothing. This is why removing it mattered more than the graphs it would have enabled: it is effectively root on the host, handed to one container.
-
-**`pid: host` shares exactly one namespace, and only one.** Namespaces are independent of each other, so sharing the PID namespace does not share the network namespace, which is why netdata still needed `bind to = 0.0.0.0` even while `pid: host` was set. What it changes is that `/proc/<pid>` inside the container enumerates the host's real processes under the host's real PIDs, which is what would let a monitor attribute CPU to the right process instead of seeing only its own.
-
-<br>
-
-**Once collected, metrics never reach a database.** netdata's per second samples live in a fixed size ring buffer in RAM, `dbengine`, which is why the first thing it logs on every start is how much space that buffer may use:
-
-```text
-MAIN : Found 0 legacy dbengines, setting multidb diskspace to 256MB
-```
-
-**No volume is declared for this container, and that follows from the ring buffer rather than being an oversight.** Old samples are overwritten as new ones arrive, so losing the writable layer on a restart costs a few hours of history and nothing structural. It is the same reasoning as the redis container in § c: both hold data that is a disposable copy, neither is a source of truth, so neither gets a volume.
-
-<br>
-
-**What this container costs the infrastructure, stated plainly for the defense:** one published port, and nothing else. No mount, no shared namespace, no capability beyond the default set, no access to the Docker daemon. What it sees, it sees because Docker gives every container that much already. It can see the machine. It cannot touch it.
-
-</details>
-
-</details>
-
-</details>
 
 </details>
 
