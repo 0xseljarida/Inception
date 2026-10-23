@@ -231,6 +231,8 @@ Early versions of Docker used LXC as the container execution driver,[4] though L
 [Wikipedia: LXC](https://en.wikipedia.org/wiki/LXC)
 
 [Docker: LXC vs. Docker](https://www.docker.com/blog/lxc-vs-docker/)
+
+[good docker vid](https://www.youtube.com/watch?v=Uur3gqmAE6g&list=PLIbkvnlX0hoQ)
 </details>
 
 </details>
