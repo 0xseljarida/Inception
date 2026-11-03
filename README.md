@@ -24,7 +24,7 @@ Since “you have to know the past to understand the present”, I included the 
 
 </details>
 
-<div>&emsp;<a href="#03--what-docker-is">03 · What Docker is</a></div>
+<div>&emsp;<a href="#03--what-docker-is">03 · What is Docker?</a></div>
 <br>
 
 <details>
@@ -361,7 +361,7 @@ The VM setting chooses a virtual CPU count; a cgroup CPU quota limits how much C
 
 <a id="03--what-docker-is"></a>
 <details>
-<summary><h1>03 · What Docker is</h1></summary>
+<summary><h1>03 · What is Docker?</h1></summary>
 
 
 At this point, **Linux** already gives us everything required to isolate a process. What is missing is a convenient, repeatable way to build, share, and run that isolated environment.
